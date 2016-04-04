@@ -5,12 +5,12 @@ import theano.tensor as T
 from theano.tensor.shared_randomstreams import RandomStreams
 import cPickle
 
-from dataset import CIFAR10
-from classifier import LogisticRegression
-from model import ReluAutoencoder
-from preprocess import ZCA, SubtractMeanAndNormalizeH
-from train import GraddescentMinibatch
-from params import save_params, load_params, set_params, get_params
+from neurobricks.dataset import CIFAR10
+from neurobricks.classifier import LogisticRegression
+from neurobricks.model import ReluAutoencoder
+from neurobricks.preprocess import ZCA, SubtractMeanAndNormalizeH
+from neurobricks.train import GraddescentMinibatch
+from neurobricks.params import save_params, load_params, set_params, get_params
 
 import pdb
 
@@ -143,7 +143,7 @@ model.print_layer()
 
 # generate a fixed mask, layer 0
 print "... generating l0 mask"
-"""
+#"""
 mask = numpy.zeros((train_x.get_value().shape[1], hid_layer_sizes[0]), dtype=theano.config.floatX)
 window_size = npy_rng.randint(layer_window_size[0][0], layer_window_size[0][1], (hid_layer_sizes[0], ))
 center_list_l0 = numpy.zeros((hid_layer_sizes[0], 2), dtype=theano.config.floatX)
@@ -160,7 +160,7 @@ for isize in window_size:
 
 center_list_l0 -= 3  # range: [0,26]
 numpy.save(open("mask_l0.npy", 'wb'), mask)
-"""
+#"""
 mask = numpy.load('mask_l0.npy')
 mask_l0_theano = theano.shared(value=mask, name='mask_l0', borrow=True)
 apply_mask_l0 = theano.function(
@@ -172,7 +172,7 @@ apply_mask_l0 = theano.function(
 # covering rate: 4*4*8000/(28*28) ~= 163,
 # this number roughly equals filter number. 
 print "... generating l1 mask"
-"""
+#"""
 mask = numpy.zeros((hid_layer_sizes[0], hid_layer_sizes[1]), dtype=theano.config.floatX)
 window_size = npy_rng.randint(layer_window_size[1][0], layer_window_size[1][1], (hid_layer_sizes[1], ))
 center_list_l1 = numpy.zeros((hid_layer_sizes[1], 2), dtype=theano.config.floatX)
@@ -194,7 +194,7 @@ for isize in window_size:
 
 center_list_l1 -= 2  # range: [0,22]
 numpy.save(open("mask_l1.npy", 'wb'), mask)
-"""
+#"""
 mask = numpy.load('mask_l1.npy')
 mask_l1_theano = theano.shared(value=mask, name='mask_l1', borrow=True)
 apply_mask_l1 = theano.function(
@@ -204,7 +204,7 @@ apply_mask_l1 = theano.function(
 
 # generate the mask for layer 2.
 print "... generating l2 mask"
-"""
+#"""
 mask = numpy.zeros((hid_layer_sizes[1], hid_layer_sizes[2]), dtype=theano.config.floatX)
 window_size = npy_rng.randint(layer_window_size[2][0], layer_window_size[2][1], (hid_layer_sizes[2], ))
 center_list_l2 = numpy.zeros((hid_layer_sizes[2], 2), dtype=theano.config.floatX)
@@ -225,7 +225,7 @@ for isize in window_size:
     i += 1
 
 numpy.save(open("mask_l2.npy", 'wb'), mask)
-"""
+#"""
 mask = numpy.load('mask_l2.npy')
 mask_l2_theano = theano.shared(value=mask, name='mask_l2', borrow=True)
 apply_mask_l2 = theano.function(
@@ -238,58 +238,6 @@ apply_mask = [apply_mask_l0, apply_mask_l1, apply_mask_l2]
 
 print "Done."
 
-#############
-# PRE-TRAIN #
-#############
-"""
-for i in range(len(hid_layer_sizes)):
-    print "\n\nPre-training layer %d:" % i
-    trainer = GraddescentMinibatch(
-        varin=model.varin, data=train_x, 
-        cost=model.models_stack[i].cost(),
-        params=model.models_stack[i].params_private,
-        supervised=False,
-        batchsize=batchsize, learningrate=pretrain_lr, momentum=momentum,
-        rng=npy_rng
-    )
-
-    init_lr = trainer.learningrate
-    prev_cost = numpy.inf
-    epc_cost = 0.
-    patience = 0
-    avg = 50
-    crnt_avg = [numpy.inf, ] * avg
-    hist_avg = [numpy.inf, ] * avg
-    for step in xrange(pretrain_epc * 50000 / batchsize):
-        # learn
-        cost = trainer.step_fast(verbose_stride=500)
-        if i < 3:
-            apply_mask[i]()
-
-        epc_cost += cost / (50000 / batchsize)
-        if step % (50000 / batchsize) == 0 and step > 0:
-            # set stop rule
-            ind = (step / (50000 / batchsize)) % avg
-            hist_avg[ind] = crnt_avg[ind]
-            crnt_avg[ind] = epc_cost
-            if sum(hist_avg) < sum(crnt_avg):
-                break
-    
-            # adjust learning rate
-            if prev_cost <= epc_cost:
-                patience += 1
-            if patience > 10:
-                trainer.set_learningrate(0.9 * trainer.learningrate)
-                patience = 0
-            prev_cost = epc_cost
-
-            epc_cost = 0.
-
-    save_params(model, 'ZCARELUAE_50000_8000_1000_1600_1600_local_wsz6_12_4_8_3_6.npy')
-load_params(model, 'ZCARELUAE_50000_8000_1000_1600_1600_local_wsz6_12_4_8_3_6.npy')
-"""
-print "Done."
-
 #########################
 # BUILD FINE-TUNE MODEL #
 #########################
@@ -299,18 +247,6 @@ model_ft = model + LogisticRegression(
     hid_layer_sizes[-1], 10, npy_rng=npy_rng
 )
 model_ft.print_layer()
-"""
-train_set_error_rate = theano.function(
-    [], 
-    T.mean(T.neq(model_ft.models_stack[-1].predict(), train_y)),
-    givens = {model_ft.varin : train_x},
-)
-test_set_error_rate = theano.function(
-    [], 
-    T.mean(T.neq(model_ft.models_stack[-1].predict(), test_y)),
-    givens = {model_ft.varin : test_x},
-)
-"""
 # compile error rate counters:
 index = T.lscalar()
 truth = T.lvector('truth')
@@ -332,33 +268,6 @@ test_set_error_rate = theano.function(
 def test_error():
     return numpy.mean([test_set_error_rate(i) for i in xrange(10000/batchsize)])
 print "Done."
-"""
-trainer = GraddescentMinibatch(
-    varin=model_ft.varin, data=train_x, 
-    truth=model_ft.models_stack[-1].vartruth, truth_data=train_y,
-    supervised=True,
-    cost=model_ft.models_stack[-1].cost() + \
-         model_ft.models_stack[-1].weightdecay(weightdecay),
-    params=model_ft.models_stack[-1].params, 
-    batchsize=batchsize, learningrate=logreg_lr, momentum=momentum,
-    rng=npy_rng
-)
-
-init_lr = trainer.learningrate
-prev_cost = numpy.inf
-for epoch in xrange(logreg_epc):
-    cost = trainer.epoch()
-    if cost >= prev_cost:
-        trainer.set_learningrate(0.9 * trainer.learningrate)
-        if trainer.learningrate < 1e-4 * init_lr:
-            break
-    prev_cost = cost
-print "Done."
-save_params(model, 'ZCARELUAE_50000_8000_1000_1600_10_local_wsz6_12_4_8_3_6.npy')
-print "***error rate: train: %f, test: %f" % (
-    train_error(), test_error()
-)
-"""
 #############
 # FINE-TUNE #
 #############
