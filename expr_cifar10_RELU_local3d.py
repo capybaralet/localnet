@@ -5,12 +5,12 @@ import theano.tensor as T
 from theano.tensor.shared_randomstreams import RandomStreams
 import cPickle
 
-from dataset import CIFAR10
-from classifier import LogisticRegression
-from model import ReluAutoencoder
-from preprocess import ZCA, SubtractMeanAndNormalizeH
-from train import GraddescentMinibatch
-from params import save_params, load_params, set_params, get_params
+from neurobricks.dataset import CIFAR10
+from neurobricks.classifier import LogisticRegression
+from neurobricks.model import ReluAutoencoder
+from neurobricks.preprocess import ZCA, SubtractMeanAndNormalizeH
+from neurobricks.train import GraddescentMinibatch
+from neurobricks.params import save_params, load_params, set_params, get_params
 
 import pdb
 
