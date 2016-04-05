@@ -16,7 +16,15 @@ from neurobricks.params import save_params, load_params, set_params, get_params
 
 import pdb
 
+import os
 import argparse
+
+from theano.tensor.signal.pool import pool_2d, Pool
+from pylearn2.packaged_dependencies.theano_linear.unshared_conv.unshared_conv import FilterActs
+#outputs = locally_connected(inputs, filters)
+locally_connected = FilterActs(1)
+
+# PARSE ARGS
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument("--sharify_every_n_batches", type=int, dest='sharify_every_n_batches', default=1)
 args_dict = vars(parser.parse_args())
@@ -24,7 +32,7 @@ locals().update(args_dict)
 settings_str = '_'.join([arg + "=" + str(args_dict[arg]) for arg in sorted(args_dict.keys())])
 print "settings_str=", settings_str
 
-import os
+# SETUP SAVEPATH
 script_dir = os.path.join(os.environ['SAVE_PATH'], os.path.basename(__file__)[:-3])
 print script_dir
 if not os.path.exists(script_dir): # make sure script_dir exists
@@ -37,15 +45,6 @@ if not os.path.exists(script_dir): # make sure script_dir exists
 savepath = os.path.join(script_dir, settings_str)
 
 
-"""
-Pylearn2 wrapper on cudaconvnet
-
-WIP
-
-for the moment, we assume that filter_groups == 1 always.
-
-"""
-
 shapes_str = """
 The shapes:
 filters: nfilters_per_row, nfilters_per_col, nchannels_per_filter, nrows_per_filter, ncolumns_per_filter, filter_groups, nfilters_per_group
@@ -53,11 +52,6 @@ biases: filter_groups, nfilters_per_group, nfilters_per_row, nfilters_per_col
 inputs: input_groups, channels_per_group, nrows, ncols, batch_size
 outputs: groups, nfilters_per_group, nfilters_per_row, nfilters_per_column, batch_size
 """
-
-from theano.tensor.signal.pool import pool_2d, Pool
-from pylearn2.packaged_dependencies.theano_linear.unshared_conv.unshared_conv import FilterActs
-locally_connected = FilterActs(1)
-#outputs = locally_connected(inputs, filters)
 
 # infer the shapes of parameters/activations in a convnet
 def infer_shapes(activation_shape, filter_sizes, nchannels, pool_sizes, pads):
@@ -104,7 +98,7 @@ def sharify(params, shared_dims, unshared_dims):
 #############
 # LOAD DATA #
 #############
-cifar10_data = CIFAR10()
+cifar10_data = CIFAR10(folderpath=os.environ["FUEL_DATA_PATH"])
 train_x, train_y = cifar10_data.get_train_set()
 test_x, test_y = cifar10_data.get_test_set()
 
