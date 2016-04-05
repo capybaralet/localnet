@@ -16,13 +16,18 @@ from neurobricks.params import save_params, load_params, set_params, get_params
 
 import pdb
 
-import os
 import argparse
+import os
+import time
 
 from theano.tensor.signal.pool import pool_2d, Pool
 from pylearn2.packaged_dependencies.theano_linear.unshared_conv.unshared_conv import FilterActs
 #outputs = locally_connected(inputs, filters)
 locally_connected = FilterActs(1)
+
+
+verbose = 1
+
 
 # PARSE ARGS
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -251,6 +256,7 @@ avg = 50
 crnt_avg = [numpy.inf, ] * avg
 hist_avg = [numpy.inf, ] * avg
 learning_curves = [list(), list()]
+ttime = time.time()
 for step in xrange(finetune_epc * 50000 / batchsize):
     # learn
     cost = trainer.step_fast(verbose_stride=500)
@@ -262,7 +268,8 @@ for step in xrange(finetune_epc * 50000 / batchsize):
         [sharify(W, range(2), range(2, 7)) for W in weights]
         #print "sharifying biases..."
         [sharify(b, range(2,4), range(2)) for b in biases]
-        #print "Done."
+        if verbose:
+            print "Done sharifying, step", step, time.time() - ttime
 
     if step % (50000 / batchsize) == 0 and step > 0:
         # set stop rule
@@ -271,7 +278,7 @@ for step in xrange(finetune_epc * 50000 / batchsize):
         crnt_avg[ind] = epc_cost
         if sum(hist_avg) < sum(crnt_avg):
             break
- 
+
         # adjust learning rate
         if prev_cost <= epc_cost:
             patience += 1
@@ -283,11 +290,11 @@ for step in xrange(finetune_epc * 50000 / batchsize):
         # evaluate
         learning_curves[0].append(train_error())
         learning_curves[1].append(test_error())
-        np.save(savepath + 'learning_curves.npy', np.array(learning_curves))
+        np.save(savepath + '__learning_curves.npy', np.array(learning_curves))
         print "***error rate: train: %f, test: %f" % (
                 learning_curves[0][-1],
                 learning_curves[1][-1])
-        
+
         epc_cost = 0.
 print "Done."
 print "***FINAL error rate, train: %f, test: %f" % (
