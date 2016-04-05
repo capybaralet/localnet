@@ -32,8 +32,8 @@ verbose = 1
 # PARSE ARGS
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument("--sharify_every_n_batches", type=int, dest='sharify_every_n_batches', default=1)
-parser.add_argument("--lr", type=int, dest='lr', default=.005)
-parser.add_argument("--init_scale", type=int, dest='init_scale', default=.01)
+parser.add_argument("--lr", type=float, dest='lr', default=.005)
+parser.add_argument("--init_scale", type=float, dest='init_scale', default=.01)
 args_dict = vars(parser.parse_args())
 locals().update(args_dict)
 settings_str = '_'.join([arg + "=" + str(args_dict[arg]) for arg in sorted(args_dict.keys())])
