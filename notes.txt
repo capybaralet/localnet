@@ -1,0 +1,5 @@
+
+It appears to be running.
+These jobs are using <20% of the GPU, it seems, so I could run 5-10 at once on each GPU, prolly.
+
+

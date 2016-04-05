@@ -27,6 +27,8 @@ locally_connected = FilterActs(1)
 # PARSE ARGS
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument("--sharify_every_n_batches", type=int, dest='sharify_every_n_batches', default=1)
+parser.add_argument("--lr", type=int, dest='lr', default=.005)
+parser.add_argument("--init_scale", type=int, dest='init_scale', default=.01)
 args_dict = vars(parser.parse_args())
 locals().update(args_dict)
 settings_str = '_'.join([arg + "=" + str(args_dict[arg]) for arg in sorted(args_dict.keys())])
@@ -95,6 +97,17 @@ def sharify(params, shared_dims, unshared_dims):
     return T.tile(T.mean(params, shared_dims), tile_shape, ndim=ndim)
 
 
+###################
+# HYPERPARAMETERS #
+###################
+zca_retain = 0.99
+batchsize = 100
+momentum = 0.9
+#weightdecay = 0.01
+finetune_lr = lr
+finetune_epc = 1000
+
+
 #############
 # LOAD DATA #
 #############
@@ -103,7 +116,7 @@ train_y = np.load(os.path.join(os.environ["FUEL_DATA_PATH"], 'cifar10/npy/train_
 test_x = np.load(os.path.join(os.environ["FUEL_DATA_PATH"], 'cifar10/npy/test_x.npy'))
 test_y = np.load(os.path.join(os.environ["FUEL_DATA_PATH"], 'cifar10/npy/test_y.npy'))
 
-if 0:
+if 1:
     print "\n... pre-processing"
     preprocess_model = SubtractMeanAndNormalizeH(train_x.shape[1])
     map_fun = theano.function([preprocess_model.varin], preprocess_model.output())
@@ -127,17 +140,6 @@ test_y = theano.shared(value = test_y,   name = 'test_y',  borrow = True)
 print "Done."
 
 
-###################
-# HYPERPARAMETERS #
-###################
-zca_retain = 0.99
-batchsize = 100
-momentum = 0.9
-#weightdecay = 0.01
-finetune_lr = 5e-3
-finetune_epc = 1000
-
-
 ###############
 # BUILD MODEL #
 ###############
@@ -148,8 +150,7 @@ activation_shape = (1, 3, 32, 32, batchsize) # reshaped for locally_connected la
 filter_sizes = [5,5,5]
 nchannels = [32,32,64]
 pool_sizes = [2,2,2]
-pads = [2,2,2] # TODO!
-#pads = [0,0,0]
+pads = [2,2,2]
 
 # Make Params
 weights_shapes, biases_shapes, activations_shapes = infer_shapes(activation_shape, filter_sizes, nchannels, pool_sizes, pads)
@@ -157,11 +158,11 @@ print shapes_str
 print "weights_shapes =", weights_shapes
 print "biases_shapes =", biases_shapes
 print "activations_shapes =", activations_shapes
-weights = [theano.shared(np.random.uniform(-.01, .01, shp).astype("float32"), name='w'+str(n)) for 
+weights = [theano.shared(np.random.uniform(-init_scale, init_scale, shp).astype("float32"), name='w'+str(n)) for 
               n,shp in enumerate(weights_shapes)]
 biases = [theano.shared(np.zeros(shp).astype("float32"), name='b'+str(n)) for 
               n,shp in enumerate(biases_shapes)]
-output_weight = theano.shared(np.random.uniform(-.01, .01, (np.prod(activations_shapes[-1]) / batchsize, 10)).astype("float32"), 'w_out')
+output_weight = theano.shared(np.random.uniform(-init_scale, init_scale, (np.prod(activations_shapes[-1]) / batchsize, 10)).astype("float32"), 'w_out')
 output_bias = theano.shared(np.zeros(10).astype("float32"), 'b_out')
 params = weights + biases + [output_weight, output_bias]
 
