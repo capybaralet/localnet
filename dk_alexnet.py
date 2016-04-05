@@ -98,9 +98,10 @@ def sharify(params, shared_dims, unshared_dims):
 #############
 # LOAD DATA #
 #############
-cifar10_data = CIFAR10(folderpath=os.environ["FUEL_DATA_PATH"])
-train_x, train_y = cifar10_data.get_train_set()
-test_x, test_y = cifar10_data.get_test_set()
+train_x = np.load(os.path.join(os.environ["FUEL_DATA_PATH"], 'cifar10/npy/train_x.npy'))
+train_y = np.load(os.path.join(os.environ["FUEL_DATA_PATH"], 'cifar10/npy/train_y.npy'))
+test_x = np.load(os.path.join(os.environ["FUEL_DATA_PATH"], 'cifar10/npy/test_x.npy'))
+test_y = np.load(os.path.join(os.environ["FUEL_DATA_PATH"], 'cifar10/npy/test_y.npy'))
 
 if 0:
     print "\n... pre-processing"
@@ -256,11 +257,11 @@ for step in xrange(finetune_epc * 50000 / batchsize):
 
     # sharify
     if step % sharify_every_n_batches == 0:
-        print "sharifying weights..."
+        #print "sharifying weights..."
         [sharify(W, range(2), range(2, 7)) for W in weights]
-        print "sharifying biases..."
+        #print "sharifying biases..."
         [sharify(b, range(2,4), range(2)) for b in biases]
-        print "Done."
+        #print "Done."
 
     if step % (50000 / batchsize) == 0 and step > 0:
         # set stop rule
