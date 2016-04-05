@@ -24,6 +24,18 @@ locals().update(args_dict)
 settings_str = '_'.join([arg + "=" + str(args_dict[arg]) for arg in sorted(args_dict.keys())])
 print "settings_str=", settings_str
 
+import os
+script_dir = os.path.join(os.environ['SAVE_PATH'], os.path.basename(__file__)[:-3])
+print script_dir
+if not os.path.exists(script_dir): # make sure script_dir exists
+    print "making directory:", script_dir
+    try:
+        os.makedirs(script_dir)
+    except:
+        pass
+# Each run of the script has its own subdir
+savepath = os.path.join(script_dir, settings_str)
+
 
 """
 Pylearn2 wrapper on cudaconvnet
@@ -242,6 +254,7 @@ patience = 0
 avg = 50
 crnt_avg = [numpy.inf, ] * avg
 hist_avg = [numpy.inf, ] * avg
+learning_curves = [list(), list()]
 for step in xrange(finetune_epc * 50000 / batchsize):
     # learn
     cost = trainer.step_fast(verbose_stride=500)
@@ -272,14 +285,18 @@ for step in xrange(finetune_epc * 50000 / batchsize):
         prev_cost = epc_cost
 
         # evaluate
+        learning_curves[0].append(train_error())
+        learning_curves[1].append(test_error())
+        np.save(savepath + 'learning_curves.npy', np.array(learning_curves))
         print "***error rate: train: %f, test: %f" % (
-            train_error(), test_error())
+                learning_curves[0][-1],
+                learning_curves[1][-1])
         
         epc_cost = 0.
 print "Done."
 print "***FINAL error rate, train: %f, test: %f" % (
     train_error(), test_error()
 )
-save_params(model, 'dk_alexnet_' + settings_str + '_.npy')
+save_params(model, savepath + '_.npy')
 
 pdb.set_trace()
