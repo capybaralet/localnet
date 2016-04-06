@@ -129,7 +129,7 @@ def sharify(param, shared_dims, unshared_dims):
             tile_shape.append(param.shape[dd])
         else:
             tile_shape.append(1)
-        print tile_shape
+        #print tile_shape
     return T.tile(T.mean(param, shared_dims, keepdims=1), tile_shape, ndim=ndim)
 
 
