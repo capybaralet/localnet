@@ -142,12 +142,17 @@ finetune_epc = 1000
 #############
 # LOAD DATA #
 #############
-train_x = np.load(os.path.join(os.environ["FUEL_DATA_PATH"], 'cifar10/npy/train_x.npy'))
-train_y = np.load(os.path.join(os.environ["FUEL_DATA_PATH"], 'cifar10/npy/train_y.npy'))
-test_x = np.load(os.path.join(os.environ["FUEL_DATA_PATH"], 'cifar10/npy/test_x.npy'))
-test_y = np.load(os.path.join(os.environ["FUEL_DATA_PATH"], 'cifar10/npy/test_y.npy'))
+try:
+    train_x = np.load(os.path.join(os.environ["FUEL_DATA_PATH"], 'cifar10/npy/train_x_preprocessed.npy'))
+    train_y = np.load(os.path.join(os.environ["FUEL_DATA_PATH"], 'cifar10/npy/train_y_preprocessed.npy'))
+    test_x = np.load(os.path.join(os.environ["FUEL_DATA_PATH"], 'cifar10/npy/test_x_preprocessed.npy'))
+    test_y = np.load(os.path.join(os.environ["FUEL_DATA_PATH"], 'cifar10/npy/test_y_preprocessed.npy'))
+except:
+    train_x = np.load(os.path.join(os.environ["FUEL_DATA_PATH"], 'cifar10/npy/train_x.npy'))
+    train_y = np.load(os.path.join(os.environ["FUEL_DATA_PATH"], 'cifar10/npy/train_y.npy'))
+    test_x = np.load(os.path.join(os.environ["FUEL_DATA_PATH"], 'cifar10/npy/test_x.npy'))
+    test_y = np.load(os.path.join(os.environ["FUEL_DATA_PATH"], 'cifar10/npy/test_y.npy'))
 
-if 1:
     print "\n... pre-processing"
     preprocess_model = SubtractMeanAndNormalizeH(train_x.shape[1])
     map_fun = theano.function([preprocess_model.varin], preprocess_model.output())
@@ -159,10 +164,10 @@ if 1:
     train_x = preprocess_function(train_x)
     test_x = preprocess_function(test_x)
 
-    feature_num = train_x.shape[0] * train_x.shape[1]
-else:
-    train_x = train_x.astype("float32")
-    test_x = test_x.astype("float32")
+    np.save(os.path.join(os.environ["FUEL_DATA_PATH"], 'cifar10/npy/train_x_preprocessed.npy'), train_x)
+    np.save(os.path.join(os.environ["FUEL_DATA_PATH"], 'cifar10/npy/train_y_preprocessed.npy'), train_y)
+    np.save(os.path.join(os.environ["FUEL_DATA_PATH"], 'cifar10/npy/test_x_preprocessed.npy'), test_x)
+    np.save(os.path.join(os.environ["FUEL_DATA_PATH"], 'cifar10/npy/test_y_preprocessed.npy'), test_y)
 
 train_x = theano.shared(value = train_x, name = 'train_x', borrow = True)
 train_y = theano.shared(value = train_y, name = 'train_y', borrow = True)
