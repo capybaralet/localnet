@@ -45,7 +45,7 @@ parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFo
 parser.add_argument("--sharify_every_n_batches", type=int, dest='sharify_every_n_batches', default=1)
 parser.add_argument("--lr", type=float, dest='lr', default=.01)
 parser.add_argument("--init_scale", type=float, dest='init_scale', default=.01)
-parser.add_argument("--architecture", type=str, dest='architecture', default='LeNet')
+parser.add_argument("--net", type=str, dest='net', default='AlexNet')
 args_dict = vars(parser.parse_args())
 locals().update(args_dict)
 settings_str = '_'.join([arg + "=" + str(args_dict[arg]) for arg in sorted(args_dict.keys())])
@@ -56,13 +56,13 @@ batchsize = 100
 input_shape = (32, 32, 3)
 input_shape = (1, input_shape[2], input_shape[0], input_shape[1], batchsize) # reshaped for locally_connected layers
 
-if architecture == 'LeNet': # TODO: top_mlp
+if net == 'LeNet': # TODO: top_mlp
     filter_sizes = [5,5]
     nchannels = [20, 50]
     pool_sizes = [2,2]
     pads = [2,2]
     #pads = [4,4]
-elif architecture == 'AlexNet':
+elif net == 'AlexNet':
     filter_sizes = [5,5,5]
     nchannels = [32,32,64]
     pool_sizes = [2,2,2]
