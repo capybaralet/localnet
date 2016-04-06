@@ -32,8 +32,11 @@ verbose = 1
 """
 TODO: 
     debug?
-        try replacing unshared_conv with shared?
-        try enforcing filter sharing from the get-go (or at least initialize them to be shared!)
+
+why do we need to unbroadcast??
+
+why doesn't LeNet work??? (padding?)
+
 """
 
 
@@ -117,16 +120,17 @@ def infer_shapes(activation_shape, filter_sizes, nchannels, pool_sizes, pads):
     return weights_shapes, biases_shapes, activation_shapes
 
 # replace local params with their average (can be used to enforce CNN weight/bias sharing)
-def sharify(params, shared_dims, unshared_dims):
+def sharify(param, shared_dims, unshared_dims):
     tile_shape = []
     ndim = len(shared_dims) + len(unshared_dims)
     assert sorted(shared_dims + unshared_dims) == range(ndim) # all dims accounted for?
     for dd in range(ndim):
         if dd in shared_dims:
-            tile_shape.append(params.shape[dd])
+            tile_shape.append(param.shape[dd])
         else:
             tile_shape.append(1)
-    return T.tile(T.mean(params, shared_dims), tile_shape, ndim=ndim)
+        print tile_shape
+    return T.tile(T.mean(param, shared_dims, keepdims=1), tile_shape, ndim=ndim)
 
 
 ###################
@@ -226,7 +230,7 @@ error_rate  = 1 - T.mean(T.eq(predictions, targets))
 
 # set-up sharify_fn
 sharify_updates = {ww: sharify(ww, range(2), range(2,7)) for ww in weights}
-sharify_updates.update({bb: sharify(bb, range(2,4), range(2)) for bb in biases})
+sharify_updates.update({bb: T.unbroadcast(sharify(bb, range(2,4), range(2)), 0,1) for bb in biases})
 sharify_fn = theano.function([], [], updates=sharify_updates)
 
 
