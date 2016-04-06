@@ -26,7 +26,7 @@ from pylearn2.packaged_dependencies.theano_linear.unshared_conv.unshared_conv im
 locally_connected = FilterActs(1)
 
 
-verbose = 1
+verbose = 0
 
 
 """
@@ -45,7 +45,7 @@ parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFo
 parser.add_argument("--sharify_every_n_batches", type=int, dest='sharify_every_n_batches', default=1)
 parser.add_argument("--lr", type=float, dest='lr', default=.01)
 parser.add_argument("--init_scale", type=float, dest='init_scale', default=.01)
-parser.add_argument("--architecture", type=str, dest='architecture', default='LeNet')
+parser.add_argument("--architecture", type=str, dest='architecture', default='AlexNet')
 args_dict = vars(parser.parse_args())
 locals().update(args_dict)
 settings_str = '_'.join([arg + "=" + str(args_dict[arg]) for arg in sorted(args_dict.keys())])
