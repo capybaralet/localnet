@@ -225,8 +225,8 @@ predictions = T.argmax(outputs, axis=1)
 error_rate  = 1 - T.mean(T.eq(predictions, targets))
 
 # set-up sharify_fn
-sharify_updates = {ww: sharify(ww, range(2), range(2,7)) for ww in weights}.update(
-                  {bb: sharify(bb, range(2,4), range(2)) for bb in biases})
+sharify_updates = {ww: sharify(ww, range(2), range(2,7)) for ww in weights}
+sharify_updates.update({bb: sharify(bb, range(2,4), range(2)) for bb in biases})
 sharify_fn = theano.function([], [], updates=sharify_updates)
 
 
