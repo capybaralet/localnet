@@ -7,7 +7,7 @@ import theano.tensor as T
 from theano.tensor.shared_randomstreams import RandomStreams
 import cPickle
 
-from neurobricks.dataset import CIFAR10
+#from neurobricks.dataset import CIFAR10
 from neurobricks.classifier import LogisticRegression
 from neurobricks.model import ReluAutoencoder
 from neurobricks.preprocess import ZCA, SubtractMeanAndNormalizeH
@@ -26,7 +26,7 @@ from pylearn2.packaged_dependencies.theano_linear.unshared_conv.unshared_conv im
 locally_connected = FilterActs(1)
 
 
-verbose = 1
+verbose = 0
 
 
 """
