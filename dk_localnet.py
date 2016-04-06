@@ -54,14 +54,15 @@ print "settings_str=", settings_str
 
 batchsize = 100
 input_shape = (32, 32, 3)
-activation_shape = (1, input_shape[2], input_shape[0], input_shape[1], batchsize) # reshaped for locally_connected layers
+input_shape = (1, input_shape[2], input_shape[0], input_shape[1], batchsize) # reshaped for locally_connected layers
 
 if net == 'LeNet': # TODO: top_mlp
     filter_sizes = [5,5]
     nchannels = [20, 50]
     pool_sizes = [2,2]
-    pads = [4,4]
-elif net == 'AlexNet':
+    pads = [2,2]
+    #pads = [4,4]
+elif architecture == 'AlexNet':
     filter_sizes = [5,5,5]
     nchannels = [32,32,64]
     pool_sizes = [2,2,2]
@@ -91,11 +92,13 @@ outputs: groups, nfilters_per_group, nfilters_per_row, nfilters_per_column, batc
 """
 
 # infer the shapes of parameters/activations in a convnet
-def infer_shapes(activation_shape, filter_sizes, nchannels, pool_sizes, pads):
+# FIXME: in AlexNet, the padding is just enough to preserve the size of the input; in LeNet, there is extra padding, and this is not longer the case!!!!
+def infer_shapes(input_shape, filter_sizes, nchannels, pool_sizes, pads):
     weights_shapes = []
     biases_shapes = []
-    activation_shapes = [activation_shape]
+    activation_shapes = [input_shape]
     for sz, chan, pool, pad in zip(filter_sizes, nchannels, pool_sizes, pads):
+        activation_shape = activation_shapes[-1]
         weights_shapes.append([activation_shape[2],
                      activation_shape[3],
                      activation_shape[1],
@@ -174,6 +177,18 @@ except:
     np.save(os.path.join(os.environ["FUEL_DATA_PATH"], 'cifar10/npy/test_x_preprocessed.npy'), test_x)
     np.save(os.path.join(os.environ["FUEL_DATA_PATH"], 'cifar10/npy/test_y_preprocessed.npy'), test_y)
 
+if 0: # why doesn't this work??? (need to decay LR more aggresively???)
+    nex = 1000
+    ntest = nex
+    print "training on " + str(nex) + " examples"
+else:
+    nex = 50000
+    ntest = 10000
+
+train_x = train_x[:nex]
+test_x = test_x[:nex]
+train_y = train_y[:ntest]
+test_y = test_y[:ntest]
 train_x = theano.shared(value = train_x, name = 'train_x', borrow = True)
 train_y = theano.shared(value = train_y, name = 'train_y', borrow = True)
 test_x = theano.shared(value = test_x,   name = 'test_x',  borrow = True)
@@ -186,7 +201,7 @@ print "Done."
 ###############
 
 # Make Params
-weights_shapes, biases_shapes, activations_shapes = infer_shapes(activation_shape, filter_sizes, nchannels, pool_sizes, pads)
+weights_shapes, biases_shapes, activations_shapes = infer_shapes(input_shape, filter_sizes, nchannels, pool_sizes, pads)
 print shapes_str
 print "weights_shapes =", weights_shapes
 print "biases_shapes =", biases_shapes
@@ -206,7 +221,7 @@ varin.tag.test_value = train_x[:batchsize].eval()
 truth.tag.test_value = train_y[:batchsize].eval()
 targets = truth
 #inputs: input_groups, channels_per_group, nrows, ncols, batch_size
-activations = [varin.reshape(activation_shape)]
+activations = [varin.reshape(input_shape)]
 for weight, bias, pool_size, activation_shape, pad in zip(weights, biases, pool_sizes, activations_shapes, pads):
     # pad with zeros
     activations[-1] = T.set_subtensor(
@@ -245,7 +260,7 @@ train_set_error_rate = theano.function(
               truth : train_y[index * batchsize: (index + 1) * batchsize]},
 )
 def train_error():
-    return numpy.mean([train_set_error_rate(i) for i in xrange(50000/batchsize)])
+    return numpy.mean([train_set_error_rate(i) for i in xrange(nex/batchsize)])
 
 test_set_error_rate = theano.function(
     [index],
@@ -254,7 +269,7 @@ test_set_error_rate = theano.function(
               truth : test_y[index * batchsize: (index + 1) * batchsize]},
 )
 def test_error():
-    return numpy.mean([test_set_error_rate(i) for i in xrange(10000/batchsize)])
+    return numpy.mean([test_set_error_rate(i) for i in xrange(ntest/batchsize)])
 
 #############
 # FINE-TUNE #
@@ -286,7 +301,7 @@ learning_curves = [list(), list()]
 ttime = time.time()
 if 1: # start with shared weights!
     sharify_fn()
-for step in xrange(finetune_epc * 50000 / batchsize):
+for step in xrange(finetune_epc * nex / batchsize):
     # learn
     cost = trainer.step_fast(verbose_stride=500)
     epc_cost += cost
@@ -297,11 +312,11 @@ for step in xrange(finetune_epc * 50000 / batchsize):
         if verbose:
             print "Done sharifying, step", step, time.time() - ttime
             print "batch cost =", cost
-            print "epc_cost =", epc_cost / (step + 1)
+            print "epc_cost =", epc_cost / ((step + 1) % (nex / batchsize))
 
-    if step % (50000 / batchsize) == 0 and step > 0:
+    if step % (nex / batchsize) == 0 and step > 0:
         # set stop rule
-        ind = (step / (50000 / batchsize)) % avg
+        ind = (step / (nex / batchsize)) % avg
         hist_avg[ind] = crnt_avg[ind]
         crnt_avg[ind] = epc_cost
         if sum(hist_avg) < sum(crnt_avg):
