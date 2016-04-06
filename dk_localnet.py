@@ -143,6 +143,7 @@ finetune_epc = 1000
 #############
 # LOAD DATA #
 #############
+print "\n... pre-processing"
 try:
     train_x = np.load(os.path.join(os.environ["FUEL_DATA_PATH"], 'cifar10/npy/train_x_preprocessed.npy'))
     train_y = np.load(os.path.join(os.environ["FUEL_DATA_PATH"], 'cifar10/npy/train_y_preprocessed.npy'))
@@ -154,7 +155,6 @@ except:
     test_x = np.load(os.path.join(os.environ["FUEL_DATA_PATH"], 'cifar10/npy/test_x.npy'))
     test_y = np.load(os.path.join(os.environ["FUEL_DATA_PATH"], 'cifar10/npy/test_y.npy'))
 
-    print "\n... pre-processing"
     preprocess_model = SubtractMeanAndNormalizeH(train_x.shape[1])
     map_fun = theano.function([preprocess_model.varin], preprocess_model.output())
 
@@ -203,10 +203,10 @@ truth.tag.test_value = train_y[:batchsize].eval()
 targets = truth
 #inputs: input_groups, channels_per_group, nrows, ncols, batch_size
 activations = [varin.reshape(activation_shape)]
-for weight, bias, pool_size, activation_shape in zip(weights, biases, pool_sizes, activations_shapes):
+for weight, bias, pool_size, activation_shape, pad in zip(weights, biases, pool_sizes, activations_shapes, pads):
     # pad with zeros
     activations[-1] = T.set_subtensor(
-                        T.zeros(activation_shape)[:, :, pool_size:-pool_size, pool_size:-pool_size, :],
+                        T.zeros(activation_shape)[:, :, pad:-pad, pad:-pad, :],
                         activations[-1])
     preactivations = locally_connected(activations[-1], weight) + bias.dimshuffle(0, 1, 2, 3, 'x')
     activations.append(preactivations * (preactivations > 0))
@@ -251,7 +251,6 @@ test_set_error_rate = theano.function(
 )
 def test_error():
     return numpy.mean([test_set_error_rate(i) for i in xrange(10000/batchsize)])
-print "Done."
 
 #############
 # FINE-TUNE #
@@ -293,6 +292,8 @@ for step in xrange(finetune_epc * 50000 / batchsize):
         sharify_fn()
         if verbose:
             print "Done sharifying, step", step, time.time() - ttime
+            print "batch cost =", cost
+            print "epc_cost =", epc_cost / (step + 1)
 
     if step % (50000 / batchsize) == 0 and step > 0:
         # set stop rule
