@@ -98,7 +98,7 @@ def infer_shapes(input_shape, filter_sizes, nchannels, pool_sizes, pads):
     biases_shapes = []
     activation_shapes = [input_shape]
     for sz, chan, pool, pad in zip(filter_sizes, nchannels, pool_sizes, pads):
-        activation_shape = activation_shapes[-1]
+        activation_shape = activation_shapes[-1] # FIXME?
         weights_shapes.append([activation_shape[2],
                      activation_shape[3],
                      activation_shape[1],
@@ -186,8 +186,8 @@ else:
     ntest = 10000
 
 train_x = train_x[:nex]
-test_x = test_x[:nex]
-train_y = train_y[:ntest]
+test_x = test_x[:ntest]
+train_y = train_y[:nex]
 test_y = test_y[:ntest]
 train_x = theano.shared(value = train_x, name = 'train_x', borrow = True)
 train_y = theano.shared(value = train_y, name = 'train_y', borrow = True)
