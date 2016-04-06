@@ -10,8 +10,8 @@ script_path = "./dk_alexnet.py"
 
 jobs = []
 for lr in [.005, .001]:
-    for init_scale in [.01, .0001]:
-        for sharify_every_n_batches in [1,2,5,10,20,50,100,500]:
+    for init_scale in [.001]:
+        for sharify_every_n_batches in [1,5,25,125]:
             cmd_line_args = []
             cmd_line_args.append(['sharify_every_n_batches', sharify_every_n_batches])
             cmd_line_args.append(['lr', lr])
@@ -20,7 +20,7 @@ for lr in [.005, .001]:
 
 gpus = range(8)
 ngpu = gpus[0]
-print "njobs =", len(jobs) #30?
+print "njobs =", len(jobs)
 print "ngpus =", len(gpus)
 print jobs
 

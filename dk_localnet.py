@@ -32,12 +32,31 @@ verbose = 1
 # PARSE ARGS
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument("--sharify_every_n_batches", type=int, dest='sharify_every_n_batches', default=1)
-parser.add_argument("--lr", type=float, dest='lr', default=.005)
+parser.add_argument("--lr", type=float, dest='lr', default=.01)
 parser.add_argument("--init_scale", type=float, dest='init_scale', default=.01)
+parser.add_argument("--architecture", type=str, dest='architecture', default='LeNet')
 args_dict = vars(parser.parse_args())
 locals().update(args_dict)
 settings_str = '_'.join([arg + "=" + str(args_dict[arg]) for arg in sorted(args_dict.keys())])
 print "settings_str=", settings_str
+
+
+batchsize = 100
+input_shape = (32, 32, 3)
+activation_shape = (1, input_shape[2], input_shape[0], input_shape[1], batchsize) # reshaped for locally_connected layers
+
+if architecture == 'LeNet': # TODO: top_mlp
+    filter_sizes = [5,5]
+    nchannels = [20, 50]
+    pool_sizes = [2,2]
+    pads = [4,4]
+elif architecture == 'AlexNet':
+    filter_sizes = [5,5,5]
+    nchannels = [32,32,64]
+    pool_sizes = [2,2,2]
+    pads = [2,2,2]
+
+
 
 # SETUP SAVEPATH
 script_dir = os.path.join(os.environ['SAVE_PATH'], os.path.basename(__file__)[:-3])
@@ -148,14 +167,6 @@ print "Done."
 ###############
 # BUILD MODEL #
 ###############
-
-# AlexNet
-input_shape = (32, 32, 3)
-activation_shape = (1, 3, 32, 32, batchsize) # reshaped for locally_connected layers
-filter_sizes = [5,5,5]
-nchannels = [32,32,64]
-pool_sizes = [2,2,2]
-pads = [2,2,2]
 
 # Make Params
 weights_shapes, biases_shapes, activations_shapes = infer_shapes(activation_shape, filter_sizes, nchannels, pool_sizes, pads)
