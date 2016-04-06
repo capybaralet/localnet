@@ -29,6 +29,13 @@ locally_connected = FilterActs(1)
 verbose = 1
 
 
+"""
+TODO: 
+    debug?
+    Adam
+"""
+
+
 # PARSE ARGS
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument("--sharify_every_n_batches", type=int, dest='sharify_every_n_batches', default=1)
@@ -189,7 +196,7 @@ varin.tag.test_value = train_x[:batchsize].eval()
 truth.tag.test_value = train_y[:batchsize].eval()
 targets = truth
 #inputs: input_groups, channels_per_group, nrows, ncols, batch_size
-activations = [varin.reshape((1, 3, 32, 32, batchsize))]
+activations = [varin.reshape(activation_shape)]
 for weight, bias, pool_size, activation_shape in zip(weights, biases, pool_sizes, activations_shapes):
     # pad with zeros
     activations[-1] = T.set_subtensor(
@@ -213,7 +220,7 @@ error_rate  = 1 - T.mean(T.eq(predictions, targets))
 
 # set-up sharify_fn
 sharify_updates = {ww: sharify(ww, range(2), range(2,7)) for ww in weights}.update(
-                  {bb: sharify(bb, range(2), range(2,3)) for bb in biases})
+                  {bb: sharify(bb, range(2,4), range(2)) for bb in biases})
 sharify_fn = theano.function([], [], updates=sharify_updates)
 
 
@@ -275,10 +282,7 @@ for step in xrange(finetune_epc * 50000 / batchsize):
 
     # sharify
     if step % sharify_every_n_batches == 0:
-        #print "sharifying weights..."
-        [sharify(W, range(2), range(2, 7)) for W in weights]
-        #print "sharifying biases..."
-        [sharify(b, range(2,4), range(2)) for b in biases]
+        sharify_fn()
         if verbose:
             print "Done sharifying, step", step, time.time() - ttime
 
