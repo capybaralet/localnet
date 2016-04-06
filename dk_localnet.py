@@ -32,7 +32,8 @@ verbose = 1
 """
 TODO: 
     debug?
-    Adam
+        try replacing unshared_conv with shared?
+        try enforcing filter sharing from the get-go (or at least initialize them to be shared!)
 """
 
 
@@ -280,6 +281,8 @@ crnt_avg = [numpy.inf, ] * avg
 hist_avg = [numpy.inf, ] * avg
 learning_curves = [list(), list()]
 ttime = time.time()
+if 1: # start with shared weights!
+    sharify_fn()
 for step in xrange(finetune_epc * 50000 / batchsize):
     # learn
     cost = trainer.step_fast(verbose_stride=500)
