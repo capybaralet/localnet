@@ -153,8 +153,8 @@ if 1:
     test_x, test_y = load_mnist(path = '/Users/david/datasets/')
     train_x = (train_x.reshape((-1, 784)) / 255.).astype("float32")
     test_x = (test_x.reshape((-1, 784)) / 255.).astype("float32")
-    train_y = train_y.astype("int64")
-    test_y = test_y.astype("int64")
+    train_y = train_y.astype("int64").reshape(-1)
+    test_y = test_y.astype("int64").reshape(-1)
     input_shape = (28,28,1)
 if 0:
     try:
