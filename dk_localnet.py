@@ -33,8 +33,6 @@ verbose = 0
 TODO: 
     debug?
 
-why do we need to unbroadcast??
-
 why doesn't LeNet work??? (padding?)
 
 """
@@ -206,7 +204,12 @@ print shapes_str
 print "weights_shapes =", weights_shapes
 print "biases_shapes =", biases_shapes
 print "activations_shapes =", activations_shapes
-weights = [theano.shared(np.random.uniform(-init_scale, init_scale, shp).astype("float32"), name='w'+str(n)) for 
+if 1: # start with shared weights:
+    weights = [theano.shared(np.tile(np.random.uniform(-init_scale, init_scale, shp[2:]).astype("float32").reshape((1,1,) + shp[2:]),
+        (shp[:2] + np.ones_like(shp)[2:])), name='w'+str(n)) for 
+                n,shp in enumerate(weights_shapes)]
+else:
+    weights = [theano.shared(np.random.uniform(-init_scale, init_scale, shp).astype("float32"), name='w'+str(n)) for 
               n,shp in enumerate(weights_shapes)]
 biases = [theano.shared(np.zeros(shp).astype("float32"), name='b'+str(n)) for 
               n,shp in enumerate(biases_shapes)]
@@ -299,7 +302,7 @@ crnt_avg = [numpy.inf, ] * avg
 hist_avg = [numpy.inf, ] * avg
 learning_curves = [list(), list()]
 ttime = time.time()
-if 1: # start with shared weights!
+if 0: # start with shared weights!
     sharify_fn()
 for step in xrange(finetune_epc * nex / batchsize):
     # learn
