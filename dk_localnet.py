@@ -25,6 +25,7 @@ from pylearn2.packaged_dependencies.theano_linear.unshared_conv.unshared_conv im
 #outputs = locally_connected(inputs, filters)
 locally_connected = FilterActs(1)
 
+from utils import unhot
 
 verbose = 0
 
@@ -44,15 +45,12 @@ parser.add_argument("--sharify_every_n_batches", type=int, dest='sharify_every_n
 parser.add_argument("--lr", type=float, dest='lr', default=.01)
 parser.add_argument("--init_scale", type=float, dest='init_scale', default=.01)
 parser.add_argument("--net", type=str, dest='net', default='AlexNet')
+parser.add_argument("--dataset", type=str, dest='dataset', default='CIFAR10')
 args_dict = vars(parser.parse_args())
 locals().update(args_dict)
 settings_str = '_'.join([arg + "=" + str(args_dict[arg]) for arg in sorted(args_dict.keys())])
 print "settings_str=", settings_str
 
-
-batchsize = 100
-input_shape = (32, 32, 3)
-input_shape = (1, input_shape[2], input_shape[0], input_shape[1], batchsize) # reshaped for locally_connected layers
 
 if net == 'LeNet': # TODO: top_mlp
     filter_sizes = [5,5]
@@ -149,39 +147,52 @@ finetune_epc = 1000
 # LOAD DATA #
 #############
 print "\n... pre-processing"
-try:
-    train_x = np.load(os.path.join(os.environ["FUEL_DATA_PATH"], 'cifar10/npy/train_x_preprocessed.npy'))
-    train_y = np.load(os.path.join(os.environ["FUEL_DATA_PATH"], 'cifar10/npy/train_y_preprocessed.npy'))
-    test_x = np.load(os.path.join(os.environ["FUEL_DATA_PATH"], 'cifar10/npy/test_x_preprocessed.npy'))
-    test_y = np.load(os.path.join(os.environ["FUEL_DATA_PATH"], 'cifar10/npy/test_y_preprocessed.npy'))
-except:
-    train_x = np.load(os.path.join(os.environ["FUEL_DATA_PATH"], 'cifar10/npy/train_x.npy'))
-    train_y = np.load(os.path.join(os.environ["FUEL_DATA_PATH"], 'cifar10/npy/train_y.npy'))
-    test_x = np.load(os.path.join(os.environ["FUEL_DATA_PATH"], 'cifar10/npy/test_x.npy'))
-    test_y = np.load(os.path.join(os.environ["FUEL_DATA_PATH"], 'cifar10/npy/test_y.npy'))
+if dataset == "CIFAR10":
+    input_shape = (32, 32, 3)
+    try:
+        train_x = np.load(os.path.join(os.environ["FUEL_DATA_PATH"], 'cifar10/npy/train_x_preprocessed.npy'))
+        train_y = np.load(os.path.join(os.environ["FUEL_DATA_PATH"], 'cifar10/npy/train_y_preprocessed.npy'))
+        test_x = np.load(os.path.join(os.environ["FUEL_DATA_PATH"], 'cifar10/npy/test_x_preprocessed.npy'))
+        test_y = np.load(os.path.join(os.environ["FUEL_DATA_PATH"], 'cifar10/npy/test_y_preprocessed.npy'))
+    except:
+        train_x = np.load(os.path.join(os.environ["FUEL_DATA_PATH"], 'cifar10/npy/train_x.npy'))
+        train_y = np.load(os.path.join(os.environ["FUEL_DATA_PATH"], 'cifar10/npy/train_y.npy'))
+        test_x = np.load(os.path.join(os.environ["FUEL_DATA_PATH"], 'cifar10/npy/test_x.npy'))
+        test_y = np.load(os.path.join(os.environ["FUEL_DATA_PATH"], 'cifar10/npy/test_y.npy'))
 
-    preprocess_model = SubtractMeanAndNormalizeH(train_x.shape[1])
-    map_fun = theano.function([preprocess_model.varin], preprocess_model.output())
+        preprocess_model = SubtractMeanAndNormalizeH(train_x.shape[1])
+        map_fun = theano.function([preprocess_model.varin], preprocess_model.output())
 
-    zca_obj = ZCA()
-    zca_obj.fit(map_fun(train_x), retain=zca_retain, whiten=True)
-    preprocess_model = preprocess_model + zca_obj.forward_layer
-    preprocess_function = theano.function([preprocess_model.varin], preprocess_model.output())
-    train_x = preprocess_function(train_x)
-    test_x = preprocess_function(test_x)
+        zca_obj = ZCA()
+        zca_obj.fit(map_fun(train_x), retain=zca_retain, whiten=True)
+        preprocess_model = preprocess_model + zca_obj.forward_layer
+        preprocess_function = theano.function([preprocess_model.varin], preprocess_model.output())
+        train_x = preprocess_function(train_x)
+        test_x = preprocess_function(test_x)
 
-    np.save(os.path.join(os.environ["FUEL_DATA_PATH"], 'cifar10/npy/train_x_preprocessed.npy'), train_x)
-    np.save(os.path.join(os.environ["FUEL_DATA_PATH"], 'cifar10/npy/train_y_preprocessed.npy'), train_y)
-    np.save(os.path.join(os.environ["FUEL_DATA_PATH"], 'cifar10/npy/test_x_preprocessed.npy'), test_x)
-    np.save(os.path.join(os.environ["FUEL_DATA_PATH"], 'cifar10/npy/test_y_preprocessed.npy'), test_y)
+        np.save(os.path.join(os.environ["FUEL_DATA_PATH"], 'cifar10/npy/train_x_preprocessed.npy'), train_x)
+        np.save(os.path.join(os.environ["FUEL_DATA_PATH"], 'cifar10/npy/train_y_preprocessed.npy'), train_y)
+        np.save(os.path.join(os.environ["FUEL_DATA_PATH"], 'cifar10/npy/test_x_preprocessed.npy'), test_x)
+        np.save(os.path.join(os.environ["FUEL_DATA_PATH"], 'cifar10/npy/test_y_preprocessed.npy'), test_y)
 
-if 0: # why doesn't this work??? (need to decay LR more aggresively???)
-    nex = 1000
-    ntest = nex
-    print "training on " + str(nex) + " examples"
-else:
-    nex = 50000
+    if 0: # why doesn't this work??? (need to decay LR more aggresively???)
+        nex = 1000
+        ntest = nex
+        print "training on " + str(nex) + " examples"
+    else:
+        nex = 50000
+        ntest = 10000
+elif dataset == "MNIST":
+    input_shape = (28, 28, 1)
+    train = np.load(os.path.join(os.environ["FUEL_DATA_PATH"], 'mnist/mnist-python/train_combined.npy'))
+    test = np.load(os.path.join(os.environ["FUEL_DATA_PATH"], 'mnist/mnist-python/valid_combined.npy'))
+    train_x = train[:, :784]
+    test_x = test[:, :784]
+    train_y = unhot(train[:, 784:])
+    test_y = unhot(test[:, 784:])
+    nex = 60000
     ntest = 10000
+
 
 train_x = train_x[:nex]
 test_x = test_x[:ntest]
@@ -191,6 +202,10 @@ train_x = theano.shared(value = train_x, name = 'train_x', borrow = True)
 train_y = theano.shared(value = train_y, name = 'train_y', borrow = True)
 test_x = theano.shared(value = test_x,   name = 'test_x',  borrow = True)
 test_y = theano.shared(value = test_y,   name = 'test_y',  borrow = True)
+
+
+input_shape = (1, input_shape[2], input_shape[0], input_shape[1], batchsize) # reshaped for locally_connected layers
+
 print "Done."
 
 
