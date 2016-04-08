@@ -146,6 +146,32 @@ def sharify(param, shared_dims, unshared_dims):
         #print tile_shape
     return T.tile(T.mean(param, shared_dims, keepdims=1), tile_shape, ndim=ndim)
 
+# Like sharify, but takes a reference param, which is used to extract the updates
+# This allows us to easily SUM instead of AVERAGE the updates!
+# TODO: output or update reference_param
+def sharify(param, shared_dims, unshared_dims, reference_param=None):
+    ndim = len(shared_dims) + len(unshared_dims)
+    assert sorted(shared_dims + unshared_dims) == range(ndim)
+    # make lists for reshaping
+    tile_shape = []
+    reference_dimshuffle = []
+    reference_dim = 0
+    for dd in range(ndim):
+        if dd in shared_dims:
+            tile_shape.append(param.shape[dd])
+            reference_dimshuffle.append('x')
+        else:
+            tile_shape.append(1)
+            reference_dimshuffle.append(reference_dim)
+            reference_dim += 1
+        #print tile_shape
+    if reference_param is not None:
+        sum_of_updates = T.sum(param - reference_param.dimshuffle(*reference_dimshuffle), shared_dims, keepdims=1)
+        updated_param = sum_of_updates + reference_param.dimshuffle(*reference_dimshuffle)
+    else:
+        updated_param = T.mean(param, shared_dims, keepdims=1)
+    return T.tile(updated_param, tile_shape, ndim=ndim)
+
 
 
 #############
