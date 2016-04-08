@@ -27,14 +27,17 @@ locally_connected = FilterActs(1)
 
 from utils import unhot
 
-verbose = 0
+verbose = 1
+test1ex = 0
+hardwire_cnn = 1
 
 
 """
 TODO: 
     debug?
 
-why doesn't LeNet work??? (padding?)
+    So the learningrate is affected by this averaging, so we need to make it larger,
+      and to compare with traditional CNN, we also need to make it per-layer!
 
 """
 
@@ -46,10 +49,20 @@ parser.add_argument("--lr", type=float, dest='lr', default=.01)
 parser.add_argument("--init_scale", type=float, dest='init_scale', default=.01)
 parser.add_argument("--net", type=str, dest='net', default='AlexNet')
 parser.add_argument("--dataset", type=str, dest='dataset', default='CIFAR10')
+parser.add_argument("--L2", type=float, dest='L2', default=0)
 args_dict = vars(parser.parse_args())
 locals().update(args_dict)
 settings_str = '_'.join([arg + "=" + str(args_dict[arg]) for arg in sorted(args_dict.keys())])
 print "settings_str=", settings_str
+
+
+###################
+# HYPERPARAMETERS #
+###################
+zca_retain = 0.99
+batchsize = 100
+momentum = 0.9
+finetune_epc = 1000
 
 
 if net == 'LeNet': # TODO: top_mlp
@@ -87,8 +100,9 @@ inputs: input_groups, channels_per_group, nrows, ncols, batch_size
 outputs: groups, nfilters_per_group, nfilters_per_row, nfilters_per_column, batch_size
 """
 
-# infer the shapes of parameters/activations in a convnet
-# FIXME: in AlexNet, the padding is just enough to preserve the size of the input; in LeNet, there is extra padding, and this is not longer the case!!!!
+# infer the shapes of parameters/activations in a convnet 
+# FIXME: in AlexNet, the padding is just enough to preserve the size of the input;
+#        in LeNet, there is extra padding, and this is no longer the case!!!!
 def infer_shapes(input_shape, filter_sizes, nchannels, pool_sizes, pads):
     weights_shapes = []
     biases_shapes = []
@@ -118,6 +132,7 @@ def infer_shapes(input_shape, filter_sizes, nchannels, pool_sizes, pads):
         activation_shapes.append(activation_shape)
     return weights_shapes, biases_shapes, activation_shapes
 
+# aka "re-tie"
 # replace local params with their average (can be used to enforce CNN weight/bias sharing)
 def sharify(param, shared_dims, unshared_dims):
     tile_shape = []
@@ -131,16 +146,6 @@ def sharify(param, shared_dims, unshared_dims):
         #print tile_shape
     return T.tile(T.mean(param, shared_dims, keepdims=1), tile_shape, ndim=ndim)
 
-
-###################
-# HYPERPARAMETERS #
-###################
-zca_retain = 0.99
-batchsize = 100
-momentum = 0.9
-#weightdecay = 0.01
-finetune_lr = lr
-finetune_epc = 1000
 
 
 #############
@@ -190,8 +195,13 @@ elif dataset == "MNIST":
     test_x = test[:, :784]
     train_y = unhot(train[:, 784:])
     test_y = unhot(test[:, 784:])
-    nex = 60000
+    nex = 50000
     ntest = 10000
+
+if test1ex:
+    batchsize = 10
+    nex = 100
+    ntest = 20
 
 
 train_x = train_x[:nex]
@@ -219,18 +229,31 @@ print shapes_str
 print "weights_shapes =", weights_shapes
 print "biases_shapes =", biases_shapes
 print "activations_shapes =", activations_shapes
-if 1: # start with shared weights:
-    weights = [theano.shared(np.tile(np.random.uniform(-init_scale, init_scale, shp[2:]).astype("float32").reshape((1,1,) + shp[2:]),
-        (shp[:2] + np.ones_like(shp)[2:])), name='w'+str(n)) for 
-                n,shp in enumerate(weights_shapes)]
+w_out = theano.shared(np.random.uniform(-init_scale, init_scale, (np.prod(activations_shapes[-1]) / batchsize, 10)).astype("float32"), 'w_out')
+b_out = theano.shared(np.zeros(10).astype("float32"), 'b_out')
+
+if hardwire_cnn:
+    untiled_weights = [theano.shared(np.random.uniform(-init_scale, init_scale, shp[2:]).astype("float32").reshape([1,1,] + shp[2:]), name='w' + str(n))
+                for n,shp in enumerate(weights_shapes)]
+    weights = [T.tile(w, shp[:2] + list(np.ones_like(shp)[2:])) for w,shp in zip(untiled_weights,weights_shapes)]
+    # biases are still separate for each location...
+    biases = [theano.shared(np.zeros(shp).astype("float32"), name='b'+str(n)) for 
+                  n,shp in enumerate(biases_shapes)]
+    params = untiled_weights + biases + [w_out, b_out]
+
 else:
-    weights = [theano.shared(np.random.uniform(-init_scale, init_scale, shp).astype("float32"), name='w'+str(n)) for 
-              n,shp in enumerate(weights_shapes)]
-biases = [theano.shared(np.zeros(shp).astype("float32"), name='b'+str(n)) for 
-              n,shp in enumerate(biases_shapes)]
-output_weight = theano.shared(np.random.uniform(-init_scale, init_scale, (np.prod(activations_shapes[-1]) / batchsize, 10)).astype("float32"), 'w_out')
-output_bias = theano.shared(np.zeros(10).astype("float32"), 'b_out')
-params = weights + biases + [output_weight, output_bias]
+    if 1: # start with shared weights:
+        weights = [theano.shared(np.tile(np.random.uniform(-init_scale, init_scale, shp[2:]).astype("float32").reshape([1,1,] + shp[2:]),
+            (shp[:2] + list(np.ones_like(shp)[2:]))), name='w'+str(n)) for 
+                    n,shp in enumerate(weights_shapes)]
+    else:
+        weights = [theano.shared(np.random.uniform(-init_scale, init_scale, shp).astype("float32"), name='w'+str(n)) for 
+                  n,shp in enumerate(weights_shapes)]
+    biases = [theano.shared(np.zeros(shp).astype("float32"), name='b'+str(n)) for 
+                  n,shp in enumerate(biases_shapes)]
+    params = weights + biases + [w_out, b_out]
+
+
 
 # set-up fprop
 varin = T.matrix('varin')
@@ -253,18 +276,24 @@ for weight, bias, pool_size, activation_shape, pad in zip(weights, biases, pool_
                                #st=pool_size,
                                mode='max', padding=(0,0),
                                ignore_border=1).dimshuffle(0,1,3,4,2))
-preoutputs = T.dot(activations[-1].reshape((batchsize, -1)), output_weight) + output_bias
+preoutputs = T.dot(activations[-1].reshape((batchsize, -1)), w_out) + b_out
 outputs = T.nnet.softmax(preoutputs)
+
+
 
 # set-up costs
 nll_cost = T.mean(-T.log(outputs[T.arange(targets.shape[0]), targets]))
+L2_cost = 0
+L2_cost = L2 * T.sum([(W**2).sum()**.5 for W in weights +[w_out,]])
+train_cost = nll_cost + L2_cost
 predictions = T.argmax(outputs, axis=1)
 error_rate  = 1 - T.mean(T.eq(predictions, targets))
 
 # set-up sharify_fn
-sharify_updates = {ww: sharify(ww, range(2), range(2,7)) for ww in weights}
-sharify_updates.update({bb: T.unbroadcast(sharify(bb, range(2,4), range(2)), 0,1) for bb in biases})
-sharify_fn = theano.function([], [], updates=sharify_updates)
+if not hardwire_cnn:
+    sharify_updates = {ww: sharify(ww, range(2), range(2,7)) for ww in weights}
+    sharify_updates.update({bb: T.unbroadcast(sharify(bb, range(2,4), range(2)), 0,1) for bb in biases})
+    sharify_fn = theano.function([], [], updates=sharify_updates)
 
 
 ###############################
@@ -289,6 +318,18 @@ test_set_error_rate = theano.function(
 def test_error():
     return numpy.mean([test_set_error_rate(i) for i in xrange(ntest/batchsize)])
 
+monitor_fn_ = theano.function(
+    [varin, truth],
+    activations + [preoutputs, outputs, nll_cost, predictions],
+)
+
+monitor_fn = theano.function(
+    [index],
+    activations + [preoutputs, outputs, nll_cost, predictions],
+    givens = {varin : train_x[index * batchsize: (index + 1) * batchsize],
+              truth : train_y[index * batchsize: (index + 1) * batchsize]},
+)
+
 #############
 # FINE-TUNE #
 #############
@@ -300,10 +341,10 @@ trainer = GraddescentMinibatch(
     truth=truth,
     truth_data=train_y,
     supervised=True,
-    cost=nll_cost,
+    cost=train_cost,
     params=params, 
     batchsize=batchsize, 
-    learningrate=finetune_lr, 
+    learningrate=lr, 
     momentum=momentum,
     rng=npy_rng
 )
@@ -315,17 +356,25 @@ patience = 0
 avg = 50
 crnt_avg = [numpy.inf, ] * avg
 hist_avg = [numpy.inf, ] * avg
-learning_curves = [list(), list()]
+
+
+monitored = []
+learning_curves = [list(), list(), list()]
 ttime = time.time()
 if 0: # start with shared weights!
     sharify_fn()
 for step in xrange(finetune_epc * nex / batchsize):
+
+    if verbose:
+        monitored.append(monitor_fn(step % (nex / batchsize)))
+        #print monitored[-1][-3]
+
     # learn
     cost = trainer.step_fast(verbose_stride=500)
     epc_cost += cost
 
     # sharify
-    if step % sharify_every_n_batches == 0:
+    if not hardwire_cnn and step % sharify_every_n_batches == 0:
         sharify_fn()
         if verbose:
             print "Done sharifying, step", step, time.time() - ttime
@@ -351,6 +400,7 @@ for step in xrange(finetune_epc * nex / batchsize):
         # evaluate
         learning_curves[0].append(train_error())
         learning_curves[1].append(test_error())
+        learning_curves[2].append(epc_cost)
         np.save(savepath + '__learning_curves.npy', np.array(learning_curves))
         print "***error rate: train: %f, test: %f" % (
                 learning_curves[0][-1],
