@@ -8,6 +8,9 @@ from speechgeneration.wordembeddings.launchers.job_launchers import launch
 filename = os.path.basename(__file__)[:-3]
 script_path = "./dk_localnet.py"
 
+
+dataset = "MNIST"
+
 jobs = []
 for lr in [.01]:
     for init_scale in [.01]:
@@ -20,6 +23,7 @@ for lr in [.01]:
                 cmd_line_args.append(['lr', lr])
                 cmd_line_args.append(['init_scale', init_scale])
                 cmd_line_args.append(['net', net])
+                cmd_line_args.append(['dataset', dataset])
                 jobs.append((script_path, cmd_line_args))
 
 gpus = range(8)
