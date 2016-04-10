@@ -28,11 +28,11 @@ from pylearn2.packaged_dependencies.theano_linear.unshared_conv.unshared_conv im
 locally_connected = FilterActs(1)
 
 
-verbose = 1
+verbose = 0
 use_10percent_of_dataset = 1
 use_100exs = 0
-hardwire_cnn = 1
-test_params = 0
+load_init_params = 1
+compare_blocks = 0
 
 
 """
@@ -57,9 +57,10 @@ TODO: Don't share biases!!
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument("--tie_every_n_batches", type=int, dest='tie_every_n_batches', default=1)
 parser.add_argument("--lr", type=float, dest='lr', default=.01)
+parser.add_argument("--dataset", type=str, dest='dataset', default='MNIST')
 parser.add_argument("--init_scale", type=float, dest='init_scale', default=.01)
 parser.add_argument("--net", type=str, dest='net', default='LeNet')
-parser.add_argument("--dataset", type=str, dest='dataset', default='MNIST')
+parser.add_argument("--hardwire_cnn", type=int, dest='hardwire_cnn', default=0)
 args_dict = vars(parser.parse_args())
 locals().update(args_dict)
 settings_str = '_'.join([arg + "=" + str(args_dict[arg]) for arg in sorted(args_dict.keys())])
@@ -197,8 +198,8 @@ else:
     ntest = 10000
 if use_100exs:
     train_x = np.load('/data/lisa/data/mnist/mnist-python/100examples/train100_x.npy')
-    test_x = np.load('/data/lisa/data/mnist/mnist-python/100examples/test100_x.npy')
     train_y = np.load('/data/lisa/data/mnist/mnist-python/100examples/train100_y.npy')
+    test_x = np.load('/data/lisa/data/mnist/mnist-python/100examples/test100_x.npy')
     test_y = np.load('/data/lisa/data/mnist/mnist-python/100examples/test100_y.npy')
     nex = 100
     ntest = 100
@@ -231,7 +232,7 @@ weights_sharing = (range(2), range(2,7)) # tied / untied
 biases_sharing = (range(2,4), range(2))
 print "tied, untied dims for weight/biases are:", weights_sharing, biases_sharing
 
-if test_params:
+if load_init_params:
     output_weight, output_bias, numpy_weights, numpy_biases = np.load('/u/kruegerd/local_cnn_test_params.npy')
 else:
     # Make numpy params:
@@ -240,6 +241,7 @@ else:
     # We make numpy arrays of the tied params, then use these to construct both the reference params and the (untied) params
     numpy_weights = [np.random.uniform(-init_scale, init_scale, get_tied_shape(shp, weights_sharing[0])).astype("float32") for
                   n,shp in enumerate(weights_shapes)]
+    # TODO: rm
     numpy_biases = [np.zeros(get_tied_shape(shp, biases_sharing[0])).astype("float32") for
                   n,shp in enumerate(biases_shapes)]
     if 1:
@@ -248,15 +250,14 @@ else:
 # these are fully connected, so no weight sharing here!
 output_weight = theano.shared(output_weight, 'w_out')
 output_bias = theano.shared(output_bias, 'b_out')
+biases = [theano.shared(get_untied(nb, biases_shapes[n]), name='b' + str(n)) for n, nb in enumerate(numpy_biases)]
+# the untiled filters
 reference_weights = [theano.shared(nw, name='ref_w' + str(n), broadcastable=weights_dims_shared) for n, nw in enumerate(numpy_weights)]
-reference_biases = [theano.shared(nb, name='ref_b' + str(n), broadcastable=biases_dims_shared) for n, nb in enumerate(numpy_biases)]
 if hardwire_cnn:
     weights = [get_untied_theano(rw, weights_shapes[n]) for n, rw in enumerate(reference_weights)]
-    biases = [get_untied_theano(rb, biases_shapes[n]) for n, rb in enumerate(reference_biases)]
-    params = reference_weights + reference_biases + [output_weight, output_bias]
+    params = reference_weights + biases + [output_weight, output_bias]
 else:
     weights = [theano.shared(get_untied(nw, weights_shapes[n]), name='w' + str(n)) for n, nw in enumerate(numpy_weights)]
-    biases = [theano.shared(get_untied(nb, biases_shapes[n]), name='b' + str(n)) for n, nb in enumerate(numpy_biases)]
     params = weights + biases + [output_weight, output_bias]
 
 
@@ -265,14 +266,24 @@ varin = T.matrix('varin')
 truth = T.lvector('truth')
 varin.tag.test_value = train_x[:batchsize].eval()
 truth.tag.test_value = train_y[:batchsize].eval()
+varin.tag.test_value = np.load('/data/lisa/data/mnist/mnist-python/100examples/train100_x.npy')
+truth.tag.test_value = np.load('/data/lisa/data/mnist/mnist-python/100examples/train100_y.npy')
 targets = truth
 #inputs: input_groups, channels_per_group, nrows, ncols, batch_size
-activations = [varin.reshape(input_shape)]
+activations = [varin.transpose().reshape(input_shape)]
+
 for weight, bias, pool_size, activation_shape, pad in zip(weights, biases, pool_sizes, activations_shapes, pads):
     # pad with zeros
     activations[-1] = T.set_subtensor(
                         T.zeros(activation_shape)[:, :, pad:-pad, pad:-pad, :],
                         activations[-1])
+    try:
+        from utils import *
+        print "activations[-1].tag.test_value[0,0].transpose(2,0,1)[:9].shape"
+        print activations[-1].tag.test_value[0,0].transpose(2,0,1)[:9].shape
+        mimshows(activations[-1].tag.test_value[0,0].transpose(2,0,1)[:9])
+    except:
+        print "couldn't show activations!"
     preactivations = locally_connected(activations[-1], weight) + bias.dimshuffle(0, 1, 2, 3, 'x')
     activations.append(preactivations * (preactivations > 0))
     # pool_2d pools over the last 2 dims
@@ -296,14 +307,23 @@ if not hardwire_cnn:
         pp_update, ref_pp_update = tie(pp, weights_dims_shared, ref_pp)
         tie_updates[pp] = pp_update
         tie_updates[ref_pp] = ref_pp_update
-    for pp, ref_pp in zip(biases, reference_biases):
-        pp_update, ref_pp_update = tie(pp, biases_dims_shared, ref_pp)
-        tie_updates[pp] = pp_update
-        tie_updates[ref_pp] = ref_pp_update
     tie_fn = theano.function([], [], updates=tie_updates)
 
+if compare_blocks:
 
-if 0:
+    outputs = activations # Not the same as blocks (missing some?)
+    grads = T.grad(nll_cost, params)
+    ovl = [var.tag.test_value for var in outputs]
+    gvl = [var.tag.test_value for var in grads]
+    pvl = [var.tag.test_value for var in [predictions]]
+    print truth.tag.test_value.squeeze()
+    print pvl
+
+    assert False
+
+
+
+
     index = T.lscalar()
     grads = T.grad(nll_cost, params)
     updates = {pp : pp - lr * grads[n] for n, pp in enumerate(params)}
@@ -387,10 +407,11 @@ for step in xrange(finetune_epc * nex / batchsize):
     # tie
     if not hardwire_cnn and step % tie_every_n_batches == 0:
         tie_fn()
-        if verbose:
-            print "Done tieing, step", step, time.time() - ttime
-            print "batch cost =", cost
-            print "epc_cost =", epc_cost / ((step + 1) % (nex / batchsize))
+
+    if verbose:
+        print "Done tying, step", step, time.time() - ttime
+        print "batch cost =", cost
+        print "epc_cost =", epc_cost / ((step + 1) % (nex / batchsize))
 
     if step % (nex / batchsize) == 0 and step > 0:
         # set stop rule
