@@ -16,6 +16,7 @@ from neurobricks.params import save_params, load_params, set_params, get_params
 
 import pdb
 
+# DK imports (below)
 import argparse
 import os
 import time
@@ -27,31 +28,11 @@ from pylearn2.packaged_dependencies.theano_linear.unshared_conv.unshared_conv im
 #outputs = locally_connected(inputs, filters)
 locally_connected = FilterActs(1)
 
-
 verbose = 0
-use_10percent_of_dataset = 1
-use_100exs = 0
+use_10percent_of_dataset = 0
 load_init_params = 1
 compare_blocks = 0
-
-
-"""
-TODO:
-    debug? doesn't seem to train...
-    why do we need to unbroadcast??
-
-NTS: the "width" in blocks is the *total width* of the distribution, so it should be double what I use here...
-
-
-TODO: naming! -- replace share -> tie in all naming (sounds more active!)
-"reference params" are the params at the time of the last tying
-    reference params -> untiled_params
-    params -> tiled_params
-
-TODO: Don't share biases!!
-
-"""
-
+hardwire_cnn = 0
 
 # PARSE ARGS
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -60,11 +41,21 @@ parser.add_argument("--lr", type=float, dest='lr', default=.01)
 parser.add_argument("--dataset", type=str, dest='dataset', default='MNIST')
 parser.add_argument("--init_scale", type=float, dest='init_scale', default=.01)
 parser.add_argument("--net", type=str, dest='net', default='LeNet')
-parser.add_argument("--hardwire_cnn", type=int, dest='hardwire_cnn', default=0)
 args_dict = vars(parser.parse_args())
 locals().update(args_dict)
 settings_str = '_'.join([arg + "=" + str(args_dict[arg]) for arg in sorted(args_dict.keys())])
 print "settings_str=", settings_str
+
+"""
+TODO:
+    why does hardwire_cnn do so poorly??
+
+NTS: the "width" in blocks is the *total width* of the distribution, so it should be double what I use here...
+TODO: params -> tiled_params
+TODO: refactor for untied biases
+
+"""
+
 
 
 ###################
@@ -82,7 +73,6 @@ if net == 'LeNet': # TODO: top_mlp
     filter_sizes = [5,5]
     nchannels = [20, 50]
     pool_sizes = [2,2]
-    pads = [2,2]
     pads = [4,4]
 elif net == 'AlexNet':
     filter_sizes = [5,5,5]
@@ -112,7 +102,6 @@ outputs: groups, nfilters_per_group, nfilters_per_row, nfilters_per_column, batc
 """
 
 # infer the shapes of parameters/activations in a convnet
-# FIXME: in AlexNet, the padding is just enough to preserve the size of the input; in LeNet, there is extra padding, and this is not longer the case!!!!
 def infer_shapes(input_shape, filter_sizes, nchannels, pool_sizes, pads):
     weights_shapes = []
     biases_shapes = []
@@ -141,29 +130,26 @@ def infer_shapes(input_shape, filter_sizes, nchannels, pool_sizes, pads):
         activation_shapes.append(activation_shape)
     return weights_shapes, biases_shapes, activation_shapes
 
-# returns param_shape with tied_dims replaced with 1s
-def get_tied_shape(param_shape, tied_dims):
-    rval = []
-    for dim in range(len(param_shape)):
-        if dim in tied_dims:
-            rval.append(1)
-        else:
-            rval.append(param_shape[dim])
-    return rval
+# returns param_shape with shared dims replaced with 1s
+def get_untiled_shape(param_shape, dims_shared):
+    return [1 if shared else param_shape[n] for n, shared in enumerate(dims_shared)]
 
-# takes a reference param and returns an array expanded along tied dims to have the untied_param_shape.
-def get_untied(numpy_reference_param, untied_param_shape):
-    tile_shape = tuple(np.array(untied_param_shape) / np.array(numpy_reference_param.shape))
-    return np.tile(numpy_reference_param, tile_shape)
+# takes a untiled param and returns an array expanded along tied dims to have the tiled_param_shape.
+def get_tiled(numpy_untiled_param, tiled_param_shape):
+    tile_shape = tuple(np.array(tiled_param_shape) / np.array(numpy_untiled_param.shape))
+    return np.tile(numpy_untiled_param, tile_shape)
 
-def get_untied_theano(theano_reference_param, untied_param_shape):
-    tile_shape = tuple(np.array(untied_param_shape) / np.array(theano_reference_param.shape.eval()))
-    return T.tile(theano_reference_param, tile_shape)
+def get_tiled_theano(theano_untiled_param, tiled_param_shape):
+    tile_shape = tuple(np.array(tiled_param_shape) / np.array(theano_untiled_param.shape.eval()))
+    return T.tile(theano_untiled_param, tile_shape)
 
 
-# uses reference_param to extract the updates
-# This allows us to easily SUM instead of AVERAGE the updates!
-def tie(param, dims_shared, reference_param=None):
+def tie(param, dims_shared, untiled_param=None):
+    """
+    (re)-tie shared (tiled) parameters along dims_shared
+    uses untiled_param to extract the updates
+    This allows us to easily SUM instead of AVERAGE the updates!
+    """
     # make lists for reshaping
     tile_shape = []
     tied_dims = [n for n, dim in enumerate(dims_shared) if dim]
@@ -173,13 +159,13 @@ def tie(param, dims_shared, reference_param=None):
         else:
             tile_shape.append(1)
         #print tile_shape
-    if reference_param is not None: # use the reference param to recover the updates
-        sum_of_updates = T.sum(param - reference_param, tied_dims, keepdims=1)
-        updated_reference_param = sum_of_updates + reference_param
+    if untiled_param is not None: # use the untiled param to recover the updates
+        sum_of_updates = T.sum(param - untiled_param, tied_dims, keepdims=1)
+        updated_untiled_param = sum_of_updates + untiled_param
     else: # just take the mean value of the parameters (i.e. averaging instead of summing the updates)
-        updated_reference_param = T.mean(param, tied_dims, keepdims=1)
-    updated_param = T.tile(updated_reference_param, tile_shape, ndim=len(dims_shared))
-    return updated_param, updated_reference_param
+        updated_untiled_param = T.mean(param, tied_dims, keepdims=1)
+    updated_param = T.tile(updated_untiled_param, tile_shape, ndim=len(dims_shared))
+    return updated_param, updated_untiled_param
 
 
 #############
@@ -196,14 +182,6 @@ if use_10percent_of_dataset:
 else:
     nex = 50000
     ntest = 10000
-if use_100exs:
-    train_x = np.load('/data/lisa/data/mnist/mnist-python/100examples/train100_x.npy')
-    train_y = np.load('/data/lisa/data/mnist/mnist-python/100examples/train100_y.npy')
-    test_x = np.load('/data/lisa/data/mnist/mnist-python/100examples/test100_x.npy')
-    test_y = np.load('/data/lisa/data/mnist/mnist-python/100examples/test100_y.npy')
-    nex = 100
-    ntest = 100
-
 print "training on " + str(nex) + " examples"
 
 train_x = train_x[:nex]
@@ -238,11 +216,11 @@ else:
     # Make numpy params:
     output_weight = np.random.uniform(-init_scale, init_scale, (np.prod(activations_shapes[-1]) / batchsize, 10)).astype("float32")
     output_bias = np.zeros(10).astype("float32")
-    # We make numpy arrays of the tied params, then use these to construct both the reference params and the (untied) params
-    numpy_weights = [np.random.uniform(-init_scale, init_scale, get_tied_shape(shp, weights_sharing[0])).astype("float32") for
+    # We make numpy arrays of the untiled params, then use these to construct both the untiled params and the tiled params
+    numpy_weights = [np.random.uniform(-init_scale, init_scale, get_untiled_shape(shp, weights_sharing[0])).astype("float32") for
                   n,shp in enumerate(weights_shapes)]
     # TODO: rm
-    numpy_biases = [np.zeros(get_tied_shape(shp, biases_sharing[0])).astype("float32") for
+    numpy_biases = [np.zeros(get_untiled_shape(shp, biases_sharing[0])).astype("float32") for
                   n,shp in enumerate(biases_shapes)]
     if 1:
         np.save('/u/kruegerd/local_cnn_test_params.npy', [output_weight, output_bias, numpy_weights, numpy_biases])
@@ -250,14 +228,14 @@ else:
 # these are fully connected, so no weight sharing here!
 output_weight = theano.shared(output_weight, 'w_out')
 output_bias = theano.shared(output_bias, 'b_out')
-biases = [theano.shared(get_untied(nb, biases_shapes[n]), name='b' + str(n)) for n, nb in enumerate(numpy_biases)]
+biases = [theano.shared(get_tiled(nb, biases_shapes[n]), name='b' + str(n)) for n, nb in enumerate(numpy_biases)]
 # the untiled filters
-reference_weights = [theano.shared(nw, name='ref_w' + str(n), broadcastable=weights_dims_shared) for n, nw in enumerate(numpy_weights)]
+untiled_weights = [theano.shared(nw, name='ref_w' + str(n), broadcastable=weights_dims_shared) for n, nw in enumerate(numpy_weights)]
 if hardwire_cnn:
-    weights = [get_untied_theano(rw, weights_shapes[n]) for n, rw in enumerate(reference_weights)]
-    params = reference_weights + biases + [output_weight, output_bias]
+    weights = [get_tiled_theano(rw, weights_shapes[n]) for n, rw in enumerate(untiled_weights)]
+    params = untiled_weights + biases + [output_weight, output_bias]
 else:
-    weights = [theano.shared(get_untied(nw, weights_shapes[n]), name='w' + str(n)) for n, nw in enumerate(numpy_weights)]
+    weights = [theano.shared(get_tiled(nw, weights_shapes[n]), name='w' + str(n)) for n, nw in enumerate(numpy_weights)]
     params = weights + biases + [output_weight, output_bias]
 
 
@@ -303,7 +281,7 @@ error_rate  = 1 - T.mean(T.eq(predictions, targets))
 if not hardwire_cnn:
     # set-up tie_fn (for manually retying parameters)
     tie_updates = {}
-    for pp, ref_pp in zip(weights, reference_weights):
+    for pp, ref_pp in zip(weights, untiled_weights):
         pp_update, ref_pp_update = tie(pp, weights_dims_shared, ref_pp)
         tie_updates[pp] = pp_update
         tie_updates[ref_pp] = ref_pp_update
