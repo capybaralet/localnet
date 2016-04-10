@@ -30,7 +30,7 @@ locally_connected = FilterActs(1)
 
 verbose = 0
 use_10percent_of_dataset = 0
-load_init_params = 1
+load_init_params = 0
 compare_blocks = 0
 hardwire_cnn = 0
 
@@ -203,12 +203,8 @@ print shapes_str
 print "weights_shapes =", weights_shapes
 print "biases_shapes =", biases_shapes
 print "activations_shapes =", activations_shapes
-# TODO: replace _sharing with _dims_shared
 weights_dims_shared = [1,1,0,0,0,0,0]
 biases_dims_shared = [0,0,1,1]
-weights_sharing = (range(2), range(2,7)) # tied / untied
-biases_sharing = (range(2,4), range(2))
-print "tied, untied dims for weight/biases are:", weights_sharing, biases_sharing
 
 if load_init_params:
     output_weight, output_bias, numpy_weights, numpy_biases = np.load('/u/kruegerd/local_cnn_test_params.npy')
@@ -217,12 +213,12 @@ else:
     output_weight = np.random.uniform(-init_scale, init_scale, (np.prod(activations_shapes[-1]) / batchsize, 10)).astype("float32")
     output_bias = np.zeros(10).astype("float32")
     # We make numpy arrays of the untiled params, then use these to construct both the untiled params and the tiled params
-    numpy_weights = [np.random.uniform(-init_scale, init_scale, get_untiled_shape(shp, weights_sharing[0])).astype("float32") for
+    numpy_weights = [np.random.uniform(-init_scale, init_scale, get_untiled_shape(shp, weights_dims_shared)).astype("float32") for
                   n,shp in enumerate(weights_shapes)]
     # TODO: rm
-    numpy_biases = [np.zeros(get_untiled_shape(shp, biases_sharing[0])).astype("float32") for
+    numpy_biases = [np.zeros(get_untiled_shape(shp, biases_dims_shared)).astype("float32") for
                   n,shp in enumerate(biases_shapes)]
-    if 1:
+    if 0:
         np.save('/u/kruegerd/local_cnn_test_params.npy', [output_weight, output_bias, numpy_weights, numpy_biases])
 # Make theano.shared params
 # these are fully connected, so no weight sharing here!
@@ -244,8 +240,8 @@ varin = T.matrix('varin')
 truth = T.lvector('truth')
 varin.tag.test_value = train_x[:batchsize].eval()
 truth.tag.test_value = train_y[:batchsize].eval()
-varin.tag.test_value = np.load('/data/lisa/data/mnist/mnist-python/100examples/train100_x.npy')
-truth.tag.test_value = np.load('/data/lisa/data/mnist/mnist-python/100examples/train100_y.npy')
+varin.tag.test_value = np.load(os.path.join(os.environ["FUEL_DATA_PATH"], 'mnist/mnist-python/100examples/train100_x.npy'))
+truth.tag.test_value = np.load(os.path.join(os.environ["FUEL_DATA_PATH"], 'mnist/mnist-python/100examples/train100_y.npy'))
 targets = truth
 #inputs: input_groups, channels_per_group, nrows, ncols, batch_size
 activations = [varin.transpose().reshape(input_shape)]
@@ -297,32 +293,10 @@ if compare_blocks:
     print truth.tag.test_value.squeeze()
     print pvl
 
-    assert False
-
-
-
-
-    index = T.lscalar()
     grads = T.grad(nll_cost, params)
-    updates = {pp : pp - lr * grads[n] for n, pp in enumerate(params)}
-
     monitor = []
     monitored = activations + [preoutputs, outputs,] + grads + [nll_cost, predictions, error_rate]
     monitored_str = "activations + [preoutputs, outputs,] + grads + [nll_cost, predictions, error_rate]"
-
-    # FIXME: I forgot the updates!!
-    train_fn = theano.function([index], 
-            monitored,
-            givens = {varin : train_x[index * batchsize: (index + 1) * batchsize],
-                      truth : train_y[index * batchsize: (index + 1) * batchsize]},
-            )
-
-
-    for step in range(1):
-        monitor.append( train_fn(step % 50) )
-        print monitored_str
-        print monitor[-1][-3:]
-
     assert False
 
 ###############################
