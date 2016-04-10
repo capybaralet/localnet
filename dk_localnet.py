@@ -30,7 +30,7 @@ locally_connected = FilterActs(1)
 
 verbose = 1
 use_10percent_of_dataset = 1
-use_100exs = 1
+use_100exs = 0
 hardwire_cnn = 1
 test_params = 0
 
@@ -40,11 +40,15 @@ TODO:
     debug? doesn't seem to train...
     why do we need to unbroadcast??
 
+NTS: the "width" in blocks is the *total width* of the distribution, so it should be double what I use here...
+
 
 TODO: naming! -- replace share -> tie in all naming (sounds more active!)
 "reference params" are the params at the time of the last tying
     reference params -> untiled_params
     params -> tiled_params
+
+TODO: Don't share biases!!
 
 """
 
@@ -188,7 +192,6 @@ if use_10percent_of_dataset:
     test_x *= 256
     nex = 5000
     ntest = nex / 10
-    print "training on " + str(nex) + " examples"
 else:
     nex = 50000
     ntest = 10000
@@ -199,6 +202,8 @@ if use_100exs:
     test_y = np.load('/data/lisa/data/mnist/mnist-python/100examples/test100_y.npy')
     nex = 100
     ntest = 100
+
+print "training on " + str(nex) + " examples"
 
 train_x = train_x[:nex]
 test_x = test_x[:ntest]
@@ -298,7 +303,7 @@ if not hardwire_cnn:
     tie_fn = theano.function([], [], updates=tie_updates)
 
 
-if 1:
+if 0:
     index = T.lscalar()
     grads = T.grad(nll_cost, params)
     updates = {pp : pp - lr * grads[n] for n, pp in enumerate(params)}
@@ -307,6 +312,7 @@ if 1:
     monitored = activations + [preoutputs, outputs,] + grads + [nll_cost, predictions, error_rate]
     monitored_str = "activations + [preoutputs, outputs,] + grads + [nll_cost, predictions, error_rate]"
 
+    # FIXME: I forgot the updates!!
     train_fn = theano.function([index], 
             monitored,
             givens = {varin : train_x[index * batchsize: (index + 1) * batchsize],
