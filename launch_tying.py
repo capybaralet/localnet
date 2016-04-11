@@ -20,7 +20,11 @@ if exp == "MNIST":
 elif exp == "CIFAR10":
     nets = ["AlexNet"]
 
-print "launching", nets, exp
+which_trainer = 'zhouhan'
+momentum = 0.
+
+print "launching", nets, exp, which_trainer
+print "momentum", momentum 
 
 jobs = []
 for lr in [.01]:
@@ -33,6 +37,8 @@ for lr in [.01]:
                 cmd_line_args.append(['init_scale', init_scale])
                 cmd_line_args.append(['net', net])
                 cmd_line_args.append(['dataset', dataset])
+                cmd_line_args.append(['momentum', momentum])
+                cmd_line_args.append(['which_trainer', which_trainer])
                 jobs.append((script_path, cmd_line_args))
 
 gpus = range(8)
