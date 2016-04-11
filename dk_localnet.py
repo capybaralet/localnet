@@ -33,7 +33,9 @@ use_10percent_of_dataset = 0
 load_init_params = 0
 compare_blocks = 0
 hardwire_cnn = 0
+trainer = 'zhouhan'
 
+momentum = 0.
 nesterov = 0
 
 # PARSE ARGS
@@ -69,7 +71,6 @@ TODO: clean-up testing code...
 ###################
 zca_retain = 0.99
 batchsize = 100
-momentum = 0.9
 batchsize = 100
 finetune_lr = lr
 finetune_epc = 1000
@@ -391,8 +392,12 @@ for step in xrange(finetune_epc * nex / batchsize):
     batch_n = step % (nex / batchsize)
 
     # learn
-    costs = train_fn(batch_n)
-    epc_cost += costs[0]
+    if trainer == 'zhouhan':
+        cost = trainer.step_fast(verbose_stride=500)
+        epc_cost += cost
+    else:
+        costs = train_fn(batch_n)
+        epc_cost += costs[0]
 
     # tie
     if not hardwire_cnn and step % tie_every_n_batches == 0:
