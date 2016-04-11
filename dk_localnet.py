@@ -33,7 +33,6 @@ use_10percent_of_dataset = 0
 load_init_params = 0
 compare_blocks = 0
 hardwire_cnn = 0
-trainer = 'david'
 
 nesterov = 0
 
@@ -45,6 +44,7 @@ parser.add_argument("--momentum", type=float, dest='momentum', default=.9)
 parser.add_argument("--dataset", type=str, dest='dataset', default='MNIST')
 parser.add_argument("--init_scale", type=float, dest='init_scale', default=.01)
 parser.add_argument("--net", type=str, dest='net', default='LeNet')
+parser.add_argument("--which_trainer", type=str, dest='which_trainer', default='zhouhan')
 args_dict = vars(parser.parse_args())
 locals().update(args_dict)
 settings_str = '_'.join([arg + "=" + str(args_dict[arg]) for arg in sorted(args_dict.keys())])
@@ -397,7 +397,7 @@ for step in xrange(finetune_epc * nex / batchsize):
     batch_n = step % (nex / batchsize)
 
     # learn
-    if trainer == 'zhouhan':
+    if which_trainer == 'zhouhan':
         cost = trainer.step_fast(verbose_stride=500)
         epc_cost += cost
     else:
