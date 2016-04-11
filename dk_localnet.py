@@ -34,6 +34,8 @@ load_init_params = 0
 compare_blocks = 0
 hardwire_cnn = 0
 
+nesterov = 0
+
 # PARSE ARGS
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument("--tie_every_n_batches", type=int, dest='tie_every_n_batches', default=1)
@@ -54,12 +56,12 @@ NTS: the "width" in blocks is the *total width* of the distribution, so it shoul
 TODO: params -> tiled_params
 TODO: refactor for untied biases
 TODO: clean-up testing code...
-
 """
 
 
 # FIXME: momentum is probably fucking with everything!
 #           I need to tie the momentum as well!!!
+# FIXME: apparently my attempts to fix the momentum were unsuccessful and may have just fucked everything up even worse!
 
 
 ###################
@@ -329,9 +331,9 @@ updates = {}
 velocities = [theano.shared(0. * pp.get_value()) for pp in params]
 velocity_updates = {vv: momentum * vv - lr * gg for vv, gg in zip(velocities, grads)}
 if nesterov:
-    updates.update{pp: pp + momentum * velocity_updates[vv] - lr * gg for pp, gg, vv in zip(params, grads, velocities)}
+    updates.update({pp: pp + momentum * velocity_updates[vv] - lr * gg for pp, gg, vv in zip(params, grads, velocities)})
 else:
-    updates.update{pp: pp + velocity_updates[vv] for pp, gg, vv in zip(params, grads, velocities)}
+    updates.update({pp: pp + velocity_updates[vv] for pp, gg, vv in zip(params, grads, velocities)})
 updates.update(velocity_updates)
 train_fn = theano.function(
     [index],
@@ -350,7 +352,7 @@ if not hardwire_cnn:
         tie_updates[ref_pp] = ref_pp_update
     # add updates to velocities
     for pp,vv in zip(params, velocities):
-        if any[pp.name == 'w' + str(n) for n in range(len(weights_shapes))]: # super hacky :/
+        if any([pp.name == 'w' + str(n) for n in range(len(weights_shapes))]): # super hacky :/
             # for momentum, we just sum all of the velocities across the tied dimensions
             tie_updates[vv] = tie(vv, weights_dims_shared, 0)[0] # TODO: testme!
     tie_fn = theano.function([], [], updates=tie_updates)
@@ -389,8 +391,8 @@ for step in xrange(finetune_epc * nex / batchsize):
     batch_n = step % (nex / batchsize)
 
     # learn
-    cost = train_fn(batch_n)
-    epc_cost += cost
+    costs = train_fn(batch_n)
+    epc_cost += costs[0]
 
     # tie
     if not hardwire_cnn and step % tie_every_n_batches == 0:
