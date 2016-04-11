@@ -329,12 +329,13 @@ def train_cost():
 ################################
 grads = T.grad(cost, params)
 updates = {}
-velocities = [theano.shared(0. * pp.get_value()) for pp in params]
-velocity_updates = {vv: momentum * vv - lr * gg for vv, gg in zip(velocities, grads)}
+velocities = {pp: theano.shared(0. * pp.get_value()) for pp in params}
+velocity_updates = {velocities[pp]: momentum * velocities[pp] - lr * gg for pp, gg in zip(params, grads)}
+# we use the updated velocities for the parameter updates (to avoid having to call a separate function "update_incs"
 if nesterov:
-    updates.update({pp: pp + momentum * velocity_updates[vv] - lr * gg for pp, gg, vv in zip(params, grads, velocities)})
+    updates.update({pp: pp + momentum * velocity_updates[velocities[pp]] - lr * gg for pp, gg in zip(params, grads)})
 else:
-    updates.update({pp: pp + velocity_updates[vv] for pp, gg, vv in zip(params, grads, velocities)})
+    updates.update({pp: pp + velocity_updates[velocities[pp]] for pp, gg in zip(params, grads)})
 updates.update(velocity_updates)
 train_fn = theano.function(
     [index],
@@ -351,11 +352,14 @@ if not hardwire_cnn:
         pp_update, ref_pp_update = tie(pp, weights_dims_shared, ref_pp)
         tie_updates[pp] = pp_update
         tie_updates[ref_pp] = ref_pp_update
-    # add updates to velocities
-    for pp,vv in zip(params, velocities):
-        if any([pp.name == 'w' + str(n) for n in range(len(weights_shapes))]): # super hacky :/
-            # for momentum, we just sum all of the velocities across the tied dimensions
-            tie_updates[vv] = tie(vv, weights_dims_shared, 0)[0] # TODO: testme!
+    # velocity updates (also uses untiled ("reference") velocities)
+    untiled_velocities = {pp: theano.shared(0. * pp.get_value()) for pp in untiled_weights}
+    for weight, untiled_weight in zip(weights, untiled_weights):
+        vv = velocities[weight]
+        ref_vv = untiled_velocities[untiled_weight]
+        vv_update, ref_vv_update = tie(vv, weights_dims_shared, ref_vv)
+        tie_updates[vv] = vv_update
+        tie_updates[ref_vv] = ref_vv_update
     tie_fn = theano.function([], [], updates=tie_updates)
 
 #############
