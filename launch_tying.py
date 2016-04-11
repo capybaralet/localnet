@@ -9,17 +9,15 @@ filename = os.path.basename(__file__)[:-3]
 script_path = "./dk_localnet.py"
 
 
-dataset = "MNIST"
+dataset = "CIFAR10"
 
 jobs = []
 for lr in [.01]:
     for init_scale in [.01]:
-        for sharify_every_n_batches in [1,2,5,10,25,50,100,500]:
+        for tie_every_n_batches in [1,2,5,10,25,50,100,500]:
             for net in ['AlexNet']:
-        #for sharify_every_n_batches in [1,5,25,125]:
-        #    for architecture in ['LeNet', 'AlexNet']:
                 cmd_line_args = []
-                cmd_line_args.append(['sharify_every_n_batches', sharify_every_n_batches])
+                cmd_line_args.append(['tie_every_n_batches', tie_every_n_batches])
                 cmd_line_args.append(['lr', lr])
                 cmd_line_args.append(['init_scale', init_scale])
                 cmd_line_args.append(['net', net])

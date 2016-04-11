@@ -53,9 +53,13 @@ TODO:
 NTS: the "width" in blocks is the *total width* of the distribution, so it should be double what I use here...
 TODO: params -> tiled_params
 TODO: refactor for untied biases
+TODO: clean-up testing code...
 
 """
 
+
+# FIXME: momentum is probably fucking with everything!
+#           I need to tie the momentum as well!!!
 
 
 ###################
@@ -144,6 +148,7 @@ def get_tiled_theano(theano_untiled_param, tiled_param_shape):
     return T.tile(theano_untiled_param, tile_shape)
 
 
+# make this more general! (untiled_param is annoying...)
 def tie(param, dims_shared, untiled_param=None):
     """
     (re)-tie shared (tiled) parameters along dims_shared
@@ -152,7 +157,7 @@ def tie(param, dims_shared, untiled_param=None):
     """
     # make lists for reshaping
     tile_shape = []
-    tied_dims = [n for n, dim in enumerate(dims_shared) if dim]
+    tying_dims = [n for n, dim in enumerate(dims_shared) if dim]
     for ndim, is_shared in enumerate(dims_shared):
         if is_shared:
             tile_shape.append(param.shape[ndim])
@@ -160,10 +165,10 @@ def tie(param, dims_shared, untiled_param=None):
             tile_shape.append(1)
         #print tile_shape
     if untiled_param is not None: # use the untiled param to recover the updates
-        sum_of_updates = T.sum(param - untiled_param, tied_dims, keepdims=1)
+        sum_of_updates = T.sum(param - untiled_param, tying_dims, keepdims=1)
         updated_untiled_param = sum_of_updates + untiled_param
     else: # just take the mean value of the parameters (i.e. averaging instead of summing the updates)
-        updated_untiled_param = T.mean(param, tied_dims, keepdims=1)
+        updated_untiled_param = T.mean(param, tying_dims, keepdims=1)
     updated_param = T.tile(updated_untiled_param, tile_shape, ndim=len(dims_shared))
     return updated_param, updated_untiled_param
 
@@ -202,6 +207,7 @@ print shapes_str
 print "weights_shapes =", weights_shapes
 print "biases_shapes =", biases_shapes
 print "activations_shapes =", activations_shapes
+# these tell us which dims will be tied
 weights_dims_shared = [1,1,0,0,0,0,0]
 biases_dims_shared = [0,0,1,1]
 
@@ -265,30 +271,23 @@ outputs = T.nnet.softmax(preoutputs)
 nll_cost = T.mean(-T.log(outputs[T.arange(targets.shape[0]), targets]))
 predictions = T.argmax(outputs, axis=1)
 error_rate  = 1 - T.mean(T.eq(predictions, targets))
-
-if not hardwire_cnn:
-    # set-up tie_fn (for manually retying parameters)
-    tie_updates = {}
-    for pp, ref_pp in zip(weights, untiled_weights):
-        pp_update, ref_pp_update = tie(pp, weights_dims_shared, ref_pp)
-        tie_updates[pp] = pp_update
-        tie_updates[ref_pp] = ref_pp_update
-    tie_fn = theano.function([], [], updates=tie_updates)
+# TODO: regularization?
+cost = nll_cost
 
 if compare_blocks:
 
     outputs = activations # Not the same as blocks (missing some?)
-    grads = T.grad(nll_cost, params)
+    grads = T.grad(cost, params)
     ovl = [var.tag.test_value for var in outputs]
     gvl = [var.tag.test_value for var in grads]
     pvl = [var.tag.test_value for var in [predictions]]
     print truth.tag.test_value.squeeze()
     print pvl
 
-    grads = T.grad(nll_cost, params)
+    grads = T.grad(cost, params)
     monitor = []
-    monitored = activations + [preoutputs, outputs,] + grads + [nll_cost, predictions, error_rate]
-    monitored_str = "activations + [preoutputs, outputs,] + grads + [nll_cost, predictions, error_rate]"
+    monitored = activations + [preoutputs, outputs,] + grads + [cost, predictions, error_rate]
+    monitored_str = "activations + [preoutputs, outputs,] + grads + [cost, predictions, error_rate]"
     assert False
 
 ###############################
@@ -313,6 +312,49 @@ test_set_error_rate = theano.function(
 def test_error():
     return numpy.mean([test_set_error_rate(i) for i in xrange(ntest/batchsize)])
 
+train_set_cost = theano.function(
+    [index],
+    cost,
+    givens = {varin : train_x[index * batchsize: (index + 1) * batchsize],
+              truth : train_y[index * batchsize: (index + 1) * batchsize]},
+)
+def train_cost():
+    return numpy.mean([train_set_cost(i) for i in xrange(nex/batchsize)])
+
+################################
+# training and tying functions #
+################################
+grads = T.grad(cost, params)
+updates = {}
+velocities = [theano.shared(0. * pp.get_value()) for pp in params]
+velocity_updates = {vv: momentum * vv - lr * gg for vv, gg in zip(velocities, grads)}
+if nesterov:
+    updates.update{pp: pp + momentum * velocity_updates[vv] - lr * gg for pp, gg, vv in zip(params, grads, velocities)}
+else:
+    updates.update{pp: pp + velocity_updates[vv] for pp, gg, vv in zip(params, grads, velocities)}
+updates.update(velocity_updates)
+train_fn = theano.function(
+    [index],
+    [cost, error_rate],
+    givens = {varin : train_x[index * batchsize: (index + 1) * batchsize],
+              truth : train_y[index * batchsize: (index + 1) * batchsize]},
+    updates = updates,
+)
+
+if not hardwire_cnn:
+    # set-up tie_fn (for manually retying parameters)
+    tie_updates = {}
+    for pp, ref_pp in zip(weights, untiled_weights):
+        pp_update, ref_pp_update = tie(pp, weights_dims_shared, ref_pp)
+        tie_updates[pp] = pp_update
+        tie_updates[ref_pp] = ref_pp_update
+    # add updates to velocities
+    for pp,vv in zip(params, velocities):
+        if any[pp.name == 'w' + str(n) for n in range(len(weights_shapes))]: # super hacky :/
+            # for momentum, we just sum all of the velocities across the tied dimensions
+            tie_updates[vv] = tie(vv, weights_dims_shared, 0)[0] # TODO: testme!
+    tie_fn = theano.function([], [], updates=tie_updates)
+
 #############
 # FINE-TUNE #
 #############
@@ -324,7 +366,7 @@ trainer = GraddescentMinibatch(
     truth=truth,
     truth_data=train_y,
     supervised=True,
-    cost=nll_cost,
+    cost=cost,
     params=params, 
     batchsize=batchsize, 
     learningrate=finetune_lr, 
@@ -332,7 +374,6 @@ trainer = GraddescentMinibatch(
     rng=npy_rng
 )
 
-init_lr = trainer.learningrate
 prev_cost = numpy.inf
 epc_cost = 0.
 patience = 0
@@ -341,11 +382,14 @@ crnt_avg = [numpy.inf, ] * avg
 hist_avg = [numpy.inf, ] * avg
 
 
-learning_curves = [list(), list()]
+learning_curves = [list(), list(), list()]
 ttime = time.time()
 for step in xrange(finetune_epc * nex / batchsize):
+
+    batch_n = step % (nex / batchsize)
+
     # learn
-    cost = trainer.step_fast(verbose_stride=500)
+    cost = train_fn(batch_n)
     epc_cost += cost
 
     # tie
@@ -355,9 +399,9 @@ for step in xrange(finetune_epc * nex / batchsize):
     if verbose:
         print "Done tying, step", step, time.time() - ttime
         print "batch cost =", cost
-        print "epc_cost =", epc_cost / ((step + 1) % (nex / batchsize))
+        #print "epc_cost =", epc_cost / ((step + 1) % (nex / batchsize))
 
-    if step % (nex / batchsize) == 0 and step > 0:
+    if batch_n == 0 and step > 0:
         # set stop rule
         ind = (step / (nex / batchsize)) % avg
         hist_avg[ind] = crnt_avg[ind]
@@ -369,23 +413,27 @@ for step in xrange(finetune_epc * nex / batchsize):
         if prev_cost <= epc_cost:
             patience += 1
         if patience > 10:
-            trainer.set_learningrate(0.9 * trainer.learningrate)
+            lr.set_value(0.9 * lr.get_value())
             patience = 0
         prev_cost = epc_cost
 
         # evaluate
         learning_curves[0].append(train_error())
         learning_curves[1].append(test_error())
+        learning_curves[2].append(train_cost())
         np.save(savepath + '__learning_curves.npy', np.array(learning_curves))
-        print "***error rate: train: %f, test: %f" % (
+        print "***error rate -- train: %f, test: %f   cost -- train: %f" % (
                 learning_curves[0][-1],
-                learning_curves[1][-1])
+                learning_curves[1][-1],
+                learning_curves[2][-1])
 
         epc_cost = 0.
 print "Done."
-print "***FINAL error rate, train: %f, test: %f" % (
-    train_error(), test_error()
-)
+print "***FINAL RESULTS:   error rate -- train: %f, test: %f   cost -- train: %f" % (
+        learning_curves[0][-1],
+        learning_curves[1][-1],
+        learning_curves[2][-1])
+
 save_params(model, savepath + '_.npy')
 
 pdb.set_trace()
