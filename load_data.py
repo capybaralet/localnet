@@ -43,12 +43,27 @@ def load_dataset(dataset):
 
     elif dataset == "MNIST":
         input_shape = (28, 28, 1)
-        train = np.load(os.path.join(os.environ["FUEL_DATA_PATH"], 'mnist/mnist-python/train_combined.npy'))
-        test = np.load(os.path.join(os.environ["FUEL_DATA_PATH"], 'mnist/mnist-python/valid_combined.npy'))
-        train_x = train[:, :784]
-        test_x = test[:, :784]
-        train_y = unhot(train[:, 784:])
-        test_y = unhot(test[:, 784:])
+        try:
+            train = np.load(os.path.join(os.environ["FUEL_DATA_PATH"], 'mnist/mnist-python/train_combined.npy'))
+            test = np.load(os.path.join(os.environ["FUEL_DATA_PATH"], 'mnist/mnist-python/valid_combined.npy'))
+            train_x = train[:, :784]
+            test_x = test[:, :784]
+            train_y = unhot(train[:, 784:])
+            test_y = unhot(test[:, 784:])
+        except:
+            raise
+
+            from datasets.load_mnist import load_mnist
+            path = '/Users/david/datasets/'
+            train_x, train_y = load_mnist(path=path)
+            test_x, test_y = load_mnist('testing', path=path)
+            #train_y = train_y.astype("int64")
+            #test_y = test_y.astype("int64")
+            train_x = train_x.reshape((-1,784)).astype("float32")
+            test_x = test_x.reshape((-1,784)).astype("float32")
+            train_x /= 256.
+            test_x /= 256.
+
         nex = 50000
         ntest = 10000
 

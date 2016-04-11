@@ -194,7 +194,6 @@ test_x = theano.shared(value = test_x,   name = 'test_x',  borrow = True)
 test_y = theano.shared(value = test_y,   name = 'test_y',  borrow = True)
 print "Done."
 
-
 ###############
 # BUILD MODEL #
 ###############
@@ -238,8 +237,8 @@ else:
 # set-up fprop
 varin = T.matrix('varin')
 truth = T.lvector('truth')
-varin.tag.test_value = train_x[:batchsize].eval()
-truth.tag.test_value = train_y[:batchsize].eval()
+#varin.tag.test_value = train_x[:batchsize].eval()
+#truth.tag.test_value = train_y[:batchsize].eval()
 varin.tag.test_value = np.load(os.path.join(os.environ["FUEL_DATA_PATH"], 'mnist/mnist-python/100examples/train100_x.npy'))
 truth.tag.test_value = np.load(os.path.join(os.environ["FUEL_DATA_PATH"], 'mnist/mnist-python/100examples/train100_y.npy'))
 targets = truth
@@ -251,13 +250,6 @@ for weight, bias, pool_size, activation_shape, pad in zip(weights, biases, pool_
     activations[-1] = T.set_subtensor(
                         T.zeros(activation_shape)[:, :, pad:-pad, pad:-pad, :],
                         activations[-1])
-    try:
-        from utils import *
-        print "activations[-1].tag.test_value[0,0].transpose(2,0,1)[:9].shape"
-        print activations[-1].tag.test_value[0,0].transpose(2,0,1)[:9].shape
-        mimshows(activations[-1].tag.test_value[0,0].transpose(2,0,1)[:9])
-    except:
-        print "couldn't show activations!"
     preactivations = locally_connected(activations[-1], weight) + bias.dimshuffle(0, 1, 2, 3, 'x')
     activations.append(preactivations * (preactivations > 0))
     # pool_2d pools over the last 2 dims
