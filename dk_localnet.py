@@ -40,7 +40,7 @@ nesterov = 0
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument("--tie_every_n_batches", type=int, dest='tie_every_n_batches', default=1)
 parser.add_argument("--lr", type=float, dest='lr', default=.01)
-parser.add_argument("--momentum", type=float, dest='momentum', default=.9)
+parser.add_argument("--momentum", type=float, dest='momentum', default=.0)
 parser.add_argument("--dataset", type=str, dest='dataset', default='MNIST')
 parser.add_argument("--init_scale", type=float, dest='init_scale', default=.01)
 parser.add_argument("--net", type=str, dest='net', default='LeNet')
