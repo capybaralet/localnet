@@ -33,7 +33,7 @@ use_10percent_of_dataset = 0
 load_init_params = 0
 compare_blocks = 0
 hardwire_cnn = 0
-trainer = 'zhouhan'
+trainer = 'david'
 
 nesterov = 0
 
@@ -41,7 +41,7 @@ nesterov = 0
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument("--tie_every_n_batches", type=int, dest='tie_every_n_batches', default=1)
 parser.add_argument("--lr", type=float, dest='lr', default=.01)
-parser.add_argument("--momentum", type=float, dest='momentum', default=.0)
+parser.add_argument("--momentum", type=float, dest='momentum', default=.9)
 parser.add_argument("--dataset", type=str, dest='dataset', default='MNIST')
 parser.add_argument("--init_scale", type=float, dest='init_scale', default=.01)
 parser.add_argument("--net", type=str, dest='net', default='LeNet')
@@ -327,6 +327,7 @@ def train_cost():
 ################################
 # training and tying functions #
 ################################
+# FIXME!
 grads = T.grad(cost, params)
 updates = {}
 velocities = {pp: theano.shared(0. * pp.get_value()) for pp in params}
@@ -353,7 +354,7 @@ if not hardwire_cnn:
         tie_updates[pp] = pp_update
         tie_updates[ref_pp] = ref_pp_update
     # velocity updates (also uses untiled ("reference") velocities)
-    untiled_velocities = {pp: theano.shared(0. * pp.get_value()) for pp in untiled_weights}
+    untiled_velocities = {pp: theano.shared(0. * pp.get_value(), broadcastable=weights_dims_shared) for pp in untiled_weights}
     for weight, untiled_weight in zip(weights, untiled_weights):
         vv = velocities[weight]
         ref_vv = untiled_velocities[untiled_weight]
