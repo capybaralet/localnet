@@ -7,7 +7,8 @@ from neurobricks.preprocess import ZCA, SubtractMeanAndNormalizeH
 import argparse
 import os
 import time
-from utils import unhot
+def unhot(arr):
+    return np.argmax(arr, axis=-1)
 
 def load_dataset(dataset):
     if dataset == "CIFAR10":
