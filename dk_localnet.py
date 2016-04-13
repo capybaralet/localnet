@@ -69,10 +69,9 @@ TODO: clean-up testing code...
 ###################
 # HYPERPARAMETERS #
 ###################
+lr = theano.shared(np.float32(lr))
 zca_retain = 0.99
 batchsize = 100
-batchsize = 100
-finetune_lr = lr
 finetune_epc = 1000
 
 # Network architecture
@@ -377,7 +376,7 @@ trainer = GraddescentMinibatch(
     cost=cost,
     params=params, 
     batchsize=batchsize, 
-    learningrate=finetune_lr, 
+    learningrate=lr.get_value(), 
     momentum=momentum,
     rng=npy_rng
 )
@@ -425,7 +424,10 @@ for step in xrange(finetune_epc * nex / batchsize):
         if prev_cost <= epc_cost:
             patience += 1
         if patience > 10:
-            lr.set_value(0.9 * lr.get_value())
+            if which_trainer == 'zhouhan':
+                trainer.set_learningrate(0.9 * trainer.learningrate)
+            else:
+                lr.set_value(0.9 * lr.get_value())
             patience = 0
         prev_cost = epc_cost
 

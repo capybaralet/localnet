@@ -10,7 +10,8 @@ script_path = "./dk_localnet.py"
 
 import argparse
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-parser.add_argument("--exp", type=str, dest='exp', default='MNIST')
+parser.add_argument("--exp", type=str, dest='exp', default='MNIST', help="help")
+parser.add_argument("--momentum", type=float, dest='momentum', default=0., help="help")
 args_dict = vars(parser.parse_args())
 locals().update(args_dict)
 
@@ -21,7 +22,6 @@ elif exp == "CIFAR10":
     nets = ["AlexNet"]
 
 which_trainer = 'zhouhan'
-momentum = 0.
 
 print "launching", nets, exp, which_trainer
 print "momentum", momentum 
